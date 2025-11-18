@@ -16,7 +16,7 @@ For help getting started with Flutter development, view the
 samples, guidance on mobile development, and a full API reference.
 
 
-# 🥗 AI 營養分析器 (ainutrition) 專案協作指南
+# 🥗 AI 營養素分析 (ainutrition) 專案協作指南
 
 歡迎所有組員！為了確保主程式碼的穩定性，我們將採用嚴格的分支工作流程。
 
