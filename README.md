@@ -15,6 +15,7 @@ For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
 
+
 # 🥗 AI 營養分析器 (ainutrition) 專案協作指南
 
 歡迎所有組員！為了確保主程式碼的穩定性，我們將採用嚴格的分支工作流程。
@@ -29,3 +30,46 @@ git clone [https://github.com/pennywong11/ainutrition.git](https://github.com/pe
 
 # 進入專案資料夾
 cd ainutrition
+
+步驟 1: 建立新的工作分支 (Branch)
+每次開始新功能開發或修復 Bug 之前，請先從 main 分支拉取最新程式碼，並建立一個新的分支：
+# 確保您在 main 分支上並同步遠端最新內容
+git switch main
+git pull
+
+# 建立並切換到新的工作分支
+# 請將 [您的功能名稱] 替換為實際的名稱，例如：feat/implement-camera-picker
+git switch -c [您的分支名稱]
+
+步驟 2: 開發、提交與推送 (Commit & Push)
+在您的新分支上進行程式碼修改，並定期提交到您的本地紀錄：
+# 完成修改後，將變動加入暫存區
+git add .
+
+# 提交變動
+git commit -m "Feat: 實作了食物照片擷取功能" 
+# [提示] 請使用簡短清晰的 Commit 訊息
+
+然後，將您的工作分支推送到 GitHub 遠端儲存庫：
+# 第一次推送時，設定追蹤遠端分支
+git push -u origin [您的分支名稱]
+
+步驟 3: 請求合併 (Pull Request, PR)
+當您確定功能已完成且沒有 Bug 時，請不要自己合併。您需要在 GitHub 網站上提交 Pull Request (PR)：
+
+進入 GitHub 專案頁面。
+
+點擊 Pull requests 選項卡。
+
+點擊 New pull request。
+
+將 您的分支 請求合併到 main 分支。
+
+等待組長或指定的審核人審核並合併。
+
+🔒 環境變數 (.env) 安全提示
+專案中的 .env 檔案用於存放機密金鑰，它已被加入 .gitignore 清單中。
+
+請勿 提交 .env 檔案到 Git。
+
+如果您需要新增環境變數，請在本地 .env 中加入，並參考 .env.example 來了解所有需要的變數。
