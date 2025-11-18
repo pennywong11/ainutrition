@@ -1,0 +1,30 @@
+name: nutrition
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0-290.4.beta
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  firebase_core: ^4.2.1
+  cloud_firestore: ^6.1.0
+  image_picker: ^1.2.1
+  flutter_spinkit: ^5.2.2
+  google_fonts: ^6.3.2
+  flutter_dotenv: ^6.0.0
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.10.3
+  mockito: ^5.5.1
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1086613473742",
+    "project_id": "nutritionanalyzer-6485e",
+    "storage_bucket": "nutritionanalyzer-6485e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086613473742:android:39ffc3d1623ab1e6fd039f",
+        "android_client_info": {
+          "package_name": "com.example.nutrition"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwS2IswiYpPj2yVOliJjIu_fggacJQc6k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
