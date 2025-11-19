@@ -56,7 +56,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   XFile? _pickedImage;
   bool _isAnalyzing = false;
   Map<String, dynamic>? _analysisResult;
-  List<String> _selectedIngredients = [];
+  final List<String> _selectedIngredients = [];
   final TextEditingController _promptController = TextEditingController();
 
   final String _userId = '04815348abcd';

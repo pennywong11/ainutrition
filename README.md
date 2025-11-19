@@ -1,4 +1,4 @@
-# ainutrition
+# nutrition
 
 A new Flutter project.
 
