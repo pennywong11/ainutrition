@@ -72,13 +72,13 @@ class Ingredient {
 
   Map<String, dynamic> toJson() {
     return {
-      'name': name,
-      'weight': weight,
-      'calories': calories,
-      'protein': protein,
-      'carbs': carbs,
-      'fat': fat,
-      'isSelected': isSelected,
+      '食材名': name, // 修改：配合你的資料庫欄位名稱要求
+      '重量(g)': weight, // 修改：配合你的資料庫欄位名稱要求
+      '熱量(kcal)': calories, // 修改：配合你的資料庫欄位名稱要求
+      '蛋白質(g)': protein, // 修改：配合你的資料庫欄位名稱要求
+      '碳水化合物(g)': carbs, // 修改：配合你的資料庫欄位名稱要求
+      '脂肪(g)': fat, // 修改：配合你的資料庫欄位名稱要求
+      // 'isSelected': isSelected, // 資料庫不需要存這個 UI 狀態，除非你想記住
     };
   }
 }
@@ -86,12 +86,14 @@ class Ingredient {
 class FoodAnalysisResult {
   String dishName;
   String aiSummary;
+  DateTime analyzedTime; // 新增：紀錄分析時間
   List<Ingredient> ingredients;
 
   FoodAnalysisResult({
     required this.dishName,
     required this.aiSummary,
     required this.ingredients,
+    required this.analyzedTime, // 建構子加入時間
   });
 
   // 計算總值 (只計算 isSelected 為 true 的食材)
@@ -163,20 +165,21 @@ class _DashboardPageState extends State<DashboardPage> {
   // 1. 初始化 Firebase Auth (匿名登入)
   Future<void> _initializeAuth() async {
     final auth = FirebaseAuth.instance;
-    // 監聽使用者狀態改變
-    auth.authStateChanges().listen((User? user) async {
-      if (user == null) {
-        try {
-          // 如果沒有使用者，自動進行匿名登入
-          UserCredential userCredential = await auth.signInAnonymously();
-          print("已匿名登入 UID: ${userCredential.user?.uid}");
-        } catch (e) {
-          print("匿名登入失敗: $e");
-        }
-      } else {
-        print("當前使用者 UID: ${user.uid}");
+    // 先檢查當前是否已經登入
+    if (auth.currentUser == null) {
+      try {
+        print("偵測到未登入，嘗試匿名登入...");
+        await auth.signInAnonymously();
+      } catch (e) {
+        print("匿名登入失敗: $e");
       }
+    }
 
+    // 監聽使用者狀態改變
+    auth.authStateChanges().listen((User? user) {
+      if (user != null) {
+        print("Auth 狀態更新 - UID: ${user.uid}");
+      }
       if (mounted) {
         setState(() {
           _user = user;
@@ -307,6 +310,7 @@ class _DashboardPageState extends State<DashboardPage> {
             dishName: data['dish_name'] ?? '未知食物',
             aiSummary: data['summary'] ?? '無法產生總結',
             ingredients: ingredients,
+            analyzedTime: DateTime.now(), // 這裡加入當前時間
           );
         });
       }
@@ -322,38 +326,60 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 6. 儲存到 Firestore
+  // 6. 儲存到 Firestore (修改重點：修正 UID 檢查與資料庫結構)
   Future<void> _saveToFirestore() async {
-    if (_user == null) {
+    // 修改 1: 不只檢查 _user 變數，直接檢查 FirebaseAuth 的核心實例
+    // 這樣可以避免因為 UI 狀態沒更新而導致誤判為未登入
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('錯誤：尚未登入 (UID 未生成)')));
+      ).showSnackBar(const SnackBar(content: Text('錯誤：系統偵測到尚未登入，請重啟 App 再試')));
       return;
     }
 
     if (_analysisResult == null) return;
 
     try {
-      final docRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(_user!.uid)
-          .collection('food_logs')
-          .doc();
+      // 修改 2: 資料庫結構調整
+      // 目標結構: users -> uid -> analysis_records -> (doc) -> ingredients -> (sub-collection docs)
 
-      await docRef.set({
-        'dish_name': _analysisResult!.dishName,
-        'summary': _analysisResult!.aiSummary,
-        'total_weight': _analysisResult!.totalWeight,
+      // A. 建立 analysis_records 文件的參考
+      final recordRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('analysis_records') // 改為 analysis_records
+          .doc(); // 自動產生 RecordId
+
+      // B. 準備批次寫入 (Batch Write) 以確保資料完整性
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+
+      // C. 設定主文件資料 (符合你的描述：AI分析建議, 食物名)
+      batch.set(recordRef, {
+        'AI分析建議': _analysisResult!.aiSummary, // 欄位名稱改成中文
+        '食物名': _analysisResult!.dishName, // 欄位名稱改成中文
+        'created_at': FieldValue.serverTimestamp(), // 加上系統時間戳記以利排序
+        'analyzed_date_string': _formatDateTime(
+          _analysisResult!.analyzedTime,
+        ), // 儲存字串格式的時間備用
+        // 也可以存總營養素方便列表顯示，不存也可以
         'total_calories': _analysisResult!.totalCalories,
-        'total_protein': _analysisResult!.totalProtein,
-        'total_carbs': _analysisResult!.totalCarbs,
-        'total_fat': _analysisResult!.totalFat,
-        'created_at': FieldValue.serverTimestamp(),
-        'ingredients': _analysisResult!.ingredients
-            .map((i) => i.toJson())
-            .toList(),
-        'image_has_been_processed': true,
       });
+
+      // D. 將食材寫入 ingredients 子集合
+      for (var ingredient in _analysisResult!.ingredients) {
+        // 只儲存被選中的食材
+        if (ingredient.isSelected) {
+          DocumentReference ingredientDoc = recordRef
+              .collection('ingredients')
+              .doc();
+          batch.set(ingredientDoc, ingredient.toJson());
+        }
+      }
+
+      // E. 提交寫入
+      await batch.commit();
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -363,7 +389,14 @@ class _DashboardPageState extends State<DashboardPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('儲存失敗: $e')));
+      print("儲存錯誤: $e");
     }
+  }
+
+  // 輔助函式：格式化時間
+  String _formatDateTime(DateTime dt) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
   }
 
   @override
@@ -577,12 +610,31 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start, // 調整對齊
             children: [
-              Text(
-                _analysisResult!.dishName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                // 使用 Expanded 避免文字溢出
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _analysisResult!.dishName,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    // 新增：顯示日期時間
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDateTime(_analysisResult!.analyzedTime),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               IconButton(
