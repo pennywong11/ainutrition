@@ -8,7 +8,7 @@ import 'admin_test.dart';
 import 'settings.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
-  '/': (context) => const NutritionDashboardApp(),      // 主畫面
+  '/': (context) => const NutritionHomePage(),      // 主畫面
   '/auth': (context) => const AuthPage(),  // 登入/註冊頁
   '/settings': (context) => const SettingsPage(), // 設定頁
   '/admin': (context) => const AdminPage(),       // 管理頁
