@@ -1,42 +1,23 @@
-// lib/auth.dart
+// lib/auth.dart - 只包含認證UI和邏輯 (已移除 main() 和 MyApp)
+
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'firebase_options.dart';
-import 'package:http/http.dart' as http;
+// 假設您在 LoginPage 裡需要 http
 
-
-//final user = FirebaseAuth.instance.currentUser;
-
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Firebase Auth Demo',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const AuthPage(),
-    );
-  }
-}
-
+// ===================================================
+// AuthPageWrapper (新的名稱)
+// 用於切換登入/註冊頁面
+// ===================================================
 class AuthPage extends StatefulWidget {
+  // <--- 重命名
   const AuthPage({super.key});
 
   @override
-  State<AuthPage> createState() => _AuthPageState();
+  State<AuthPage> createState() => _AuthPage();
 }
 
-class _AuthPageState extends State<AuthPage> {
+class _AuthPage extends State<AuthPage> {
+  // <--- 調整 State 類別名稱
   bool isLogin = true;
 
   void togglePage() {
@@ -90,9 +71,9 @@ class _LoginPageState extends State<LoginPage> {
     final password = passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請輸入帳號與密碼')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('請輸入帳號與密碼')));
       return;
     }
 
@@ -117,7 +98,9 @@ class _LoginPageState extends State<LoginPage> {
           content: Text('歡迎回來！ $email'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+              // 🎯 關鍵修改點：從 '/' 改為 '/analysis'
+              onPressed: () =>
+                  Navigator.pushReplacementNamed(context, '/analysis'),
               child: const Text('OK'),
             ),
           ],
@@ -130,18 +113,16 @@ class _LoginPageState extends State<LoginPage> {
         Uri.parse("http://127.0.0.1:8000/admin"),
         headers: {"Authorization": "Bearer $token"},
       );*/
-      FirebaseAuth.instance
-        .authStateChanges()
-        .listen((User? user) {
-          if (user != null) {
-            print(user.uid);
-          }
-        });
-        
+      FirebaseAuth.instance.authStateChanges().listen((User? user) {
+        if (user != null) {
+          print(user.uid);
+        }
+      });
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('登入失敗：${e.message}')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('登入失敗：${e.message}')));
     }
   }
 
@@ -247,34 +228,30 @@ class _RegisterPageState extends State<RegisterPage> {
     final confirm = confirmPasswordController.text.trim();
 
     if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('請輸入所有欄位')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('請輸入所有欄位')));
       return;
     }
 
     if (password != confirm) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('兩次密碼不一致')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('兩次密碼不一致')));
       return;
     }
 
     setState(() => isLoading = true);
 
     try {
-      // 普通註冊
-      //final userCredential = await FirebaseAuth.instance
-      //    .createUserWithEmailAndPassword(email: email, password: password);
-
-      // 匿名轉永久帳號
+      // ... (註冊邏輯略)
       final credential = EmailAuthProvider.credential(
         email: email,
         password: password,
       );
 
       final userCredential = await FirebaseAuth.instance.currentUser
-      ?.linkWithCredential(credential);
+          ?.linkWithCredential(credential);
 
       await userCredential?.user!.sendEmailVerification();
 
@@ -285,9 +262,9 @@ class _RegisterPageState extends State<RegisterPage> {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('驗證信已寄出，請前往信箱確認')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('驗證信已寄出，請前往信箱確認')));
 
       showDialog(
         context: context,
@@ -307,8 +284,9 @@ class _RegisterPageState extends State<RegisterPage> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
     }
   }
 
