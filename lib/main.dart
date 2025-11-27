@@ -55,8 +55,12 @@ import 'routes.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-//import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
+
+// 全局變數，用於儲存當前登入的使用者資訊
+User? currentUser;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

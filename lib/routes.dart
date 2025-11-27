@@ -1,6 +1,6 @@
 // lib/routes.dart
 import 'package:flutter/material.dart';
-import 'hisotry_page.dart';
+import 'history_page.dart';
 import 'analysisfood.dart';
 import 'auth.dart';
 
