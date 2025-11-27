@@ -36,7 +36,7 @@ void main() async {
     }
   }
 
-  runApp(const NutritionAnalyzer());
+  runApp(const MyApp());
 }
 
 // -----------------------------------------------------------------------------
@@ -119,8 +119,8 @@ class FoodAnalysisResult {
 // 主程式 UI
 // -----------------------------------------------------------------------------
 
-class NutritionAnalyzer extends StatelessWidget {
-  const NutritionAnalyzer({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -444,7 +444,7 @@ class _DashboardPageState extends State<DashboardPage> {
               //const SizedBox(height: 16),
               _buildControlBar(),
 
-              //const SizedBox(height: 24),
+              const SizedBox(height: 24),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {

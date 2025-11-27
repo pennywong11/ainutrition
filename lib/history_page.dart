@@ -1,12 +1,12 @@
 // 匯入 Flutter 的 Material UI 函式庫
 import 'package:flutter/material.dart';
 import 'dart:async'; // 管理StreamSubscription(監聽器的開關)
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:fl_chart/fl_chart.dart'; //圓餅圖套件
 import 'package:firebase_core/firebase_core.dart'; //Firebase核心
 import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料庫功能
 import 'firebase_options.dart'; // 引入Firebase設定檔(由FlutterFire CLI產生)
+import 'package:firebase_auth/firebase_auth.dart';
 
 // 加註解來進行pull request
 // ----------------------------------------------
@@ -17,6 +17,7 @@ import 'firebase_options.dart'; // 引入Firebase設定檔(由FlutterFire CLI產
 // 對應Firebase的路徑：users/uid/analysis_records/{document}
 class FoodItem {
   String id; // 文件ID(刪除、修改用的)
+  DocumentReference? reference; // 用來記住這筆資料在 Firebase 的準確位置
   String name; // 食物名稱
   String calories; // 總熱量
   String imagePath; // 圖片網址(Firebase Storage URL或外部連結)
@@ -29,6 +30,7 @@ class FoodItem {
   String aiSuggestion; // AI分析建議(唯讀，不可編輯)
 
   FoodItem({
+    this.reference,
     required this.id,
     required this.name,
     required this.calories,
@@ -46,6 +48,7 @@ class FoodItem {
 // 每個"食材"的資料結構
 // 對應Firebase的路徑：users/uid/analysis_records/{document}/ingredients/{sub_doc}
 class Ingredient {
+  final String? id;
   final String name; // 食材名稱
   final double grams; // 重量
   final double calories; // 熱量
@@ -54,6 +57,7 @@ class Ingredient {
   final double fat; // 脂肪
 
   Ingredient({
+    this.id,
     required this.name,
     required this.grams,
     required this.calories,
@@ -136,125 +140,173 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   @override
   void initState() {
     super.initState();
-    _selectedDate = DateTime.now(); // 預設選取"今日"
-    _listenToFirebaseData(); // 當App一啟動，馬上開始監聽Firebase資料
+    _selectedDate = DateTime.now();
+    // 呼叫函式來處理登入邏輯
+    _checkLoginAndListen();
   }
 
-  // _listenToFirebaseData()：負責去Firebase抓取資料、過濾日期、計算總和、更新畫面
+  // 負責處理匿名登入
+  Future<void> _checkLoginAndListen() async {
+    User? user = FirebaseAuth.instance.currentUser;
+
+    // 如果目前沒有登入使用者 (第一次開啟App)
+    if (user == null) {
+      try {
+        print("系統：偵測到未登入，正在進行匿名登入...");
+        // 這行指令會向 Firebase 請求一個隨機的匿名 UID
+        UserCredential userCredential = await FirebaseAuth.instance
+            .signInAnonymously();
+        user = userCredential.user;
+        print("系統：匿名登入成功！UID: ${user?.uid}");
+      } catch (e) {
+        print("系統：登入失敗: $e");
+      }
+    } else {
+      print("系統：已登入，UID: ${user.uid}");
+    }
+
+    // 登入完成後，才開始監聽資料
+    if (user != null) {
+      _listenToFirebaseData(); // 把 UID 傳進去
+    }
+  }
+
+  // 移除參數，改用 _selectedDate 進行精準查詢
   void _listenToFirebaseData() {
-    // 1. 如果之前有監聽別的日期，會先切斷以避免重複接收
+    // 1. 切斷舊的連線，避免重複監聽
     _foodSubscription?.cancel();
+
     print("系統：切換日期至 ${_selectedDate.toString().split(' ')[0]}");
+    print("系統：正在向 Firebase 請求該日期的資料...");
 
-    // 2. 建立新的監聽連線
+    // 2. 設定當天的「開始時間」與「結束時間」
+    // 例如：2025-11-24 00:00:00.000
+    final DateTime startOfDay = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      0,
+      0,
+      0,
+    );
+    // 例如：2025-11-24 23:59:59.999
+    final DateTime endOfDay = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    // 3. 建立帶有時間範圍過濾的查詢
     _foodSubscription = FirebaseFirestore.instance
-        .collection('users')
-        .doc('uid') // TODO: 未來這裡要換成真實登入用戶的 UID
-        .collection('analysis_records')
-        .snapshots() // 代表"即時監聽"，當資料庫一變，這裡就會馬上收到通知
-        .listen((snapshot) async {
-          List<FoodItem> newFoodList = []; // 準備一個新的空列表
+        .collectionGroup('analysis_records')
+        // 🔥 關鍵：只抓取 created_at 介於這段時間的資料 🔥
+        .where('created_at', isGreaterThanOrEqualTo: startOfDay)
+        .where('created_at', isLessThanOrEqualTo: endOfDay)
+        .snapshots()
+        .listen(
+          (snapshot) async {
+            List<FoodItem> newFoodList = [];
 
-          try {
-            // 3.迴圈檢查每筆抓取到的資料
-            for (var doc in snapshot.docs) {
-              var data = doc.data();
+            try {
+              // 4. 因為 Firebase 已經幫我們篩選好日期了，這裡直接讀取即可
+              // 不需要再寫 if (!isSameDay) continue; 了！
+              for (var doc in snapshot.docs) {
+                var data = doc.data();
 
-              // 日期過濾器
-              // 如果這筆資料沒有created_at欄位或是日期不是被選中的那天，就跳過
-              Timestamp? ts = data['created_at'];
-              if (ts == null) continue;
-              DateTime recordDate = ts.toDate();
+                // 過濾垃圾資料 "string"
+                String foodName = data['食物名'] ?? '未命名';
+                if (foodName == 'string' || foodName == '未命名') continue;
 
-              bool isSameDay =
-                  recordDate.year == _selectedDate.year &&
-                  recordDate.month == _selectedDate.month &&
-                  recordDate.day == _selectedDate.day;
+                // --- 以下是原本的讀取邏輯 (直接複製您的原本代碼即可) ---
+                String docId = doc.id;
+                String suggestion = data['AI分析建議'] ?? '';
+                String imgUrl = data['圖片網址'] ?? '';
 
-              if (!isSameDay) continue; // 不是今天就跳過(continue)
+                List<Ingredient> ingredientsList = [];
+                double totalGrams = 0;
+                double totalCalories = 0;
+                double totalProtein = 0;
+                double totalCarbs = 0;
+                double totalFat = 0;
 
-              // 讀取基本欄位
-              String docId = doc.id;
-              String foodName = data['食物名'] ?? '未命名';
-              String suggestion = data['AI分析建議'] ?? ''; // 這邊會是AI給的建議(唯讀)
-              String imgUrl = data['圖片網址'] ?? ''; // 照片連結
+                try {
+                  var ingredientSnapshot = await doc.reference
+                      .collection('ingredients')
+                      .get();
+                  for (var ingDoc in ingredientSnapshot.docs) {
+                    var ingData = ingDoc.data();
+                    double g = _parseToDouble(ingData['重量(g)']);
+                    double cal = _parseToDouble(ingData['熱量(kcal)']);
+                    double p = _parseToDouble(ingData['蛋白質(g)']);
+                    double c = _parseToDouble(ingData['碳水化合物(g)']);
+                    double f = _parseToDouble(ingData['脂肪(g)']);
+                    String name = ingData['食材名'] ?? '未知食材';
 
-              // 讀取食材子集合(ingredients)
-              List<Ingredient> ingredientsList = [];
-              double totalGrams = 0;
-              double totalCalories = 0;
-              double totalProtein = 0;
-              double totalCarbs = 0;
-              double totalFat = 0;
+                    totalGrams += g;
+                    totalCalories += cal;
+                    totalProtein += p;
+                    totalCarbs += c;
+                    totalFat += f;
 
-              try {
-                // 進入下一層：抓取ingredients
-                var ingredientSnapshot = await doc.reference
-                    .collection('ingredients')
-                    .get();
-                for (var ingDoc in ingredientSnapshot.docs) {
-                  var ingData = ingDoc.data();
-
-                  // 防呆轉換：確保不管資料庫存String或Number都可以讀取、不會閃退
-                  double g = _parseToDouble(ingData['重量(g)']);
-                  double cal = _parseToDouble(ingData['熱量(kcal)']);
-                  double p = _parseToDouble(ingData['蛋白質(g)']);
-                  double c = _parseToDouble(ingData['碳水化合物(g)']);
-                  double f = _parseToDouble(ingData['脂肪(g)']);
-                  String name = ingData['食材名'] ?? '未知食材';
-
-                  // 累加營養素
-                  totalGrams += g;
-                  totalCalories += cal;
-                  totalProtein += p;
-                  totalCarbs += c;
-                  totalFat += f;
-
-                  // 加入食材清單
-                  ingredientsList.add(
-                    Ingredient(
-                      name: name,
-                      grams: g,
-                      calories: cal,
-                      carbs: c,
-                      protein: p,
-                      fat: f,
-                    ),
-                  );
+                    ingredientsList.add(
+                      Ingredient(
+                        id: ingDoc.id,
+                        name: name,
+                        grams: g,
+                        calories: cal,
+                        carbs: c,
+                        protein: p,
+                        fat: f,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  print("讀取食材錯誤: $e");
                 }
-              } catch (e) {
-                print("讀取食材錯誤: $e");
+
+                newFoodList.add(
+                  FoodItem(
+                    reference: doc.reference,
+                    id: docId,
+                    name: foodName,
+                    calories: '${totalCalories.toStringAsFixed(0)} 大卡',
+                    imagePath: imgUrl,
+                    grams: totalGrams.toStringAsFixed(1),
+                    protein: totalProtein.toStringAsFixed(1),
+                    carbs: totalCarbs.toStringAsFixed(1),
+                    fat: totalFat.toStringAsFixed(1),
+                    ingredients: ingredientsList,
+                    remark: data['備註'] ?? '',
+                    aiSuggestion: suggestion,
+                  ),
+                );
+                // --- 原本邏輯結束 ---
               }
-
-              // 打包這筆完整的食物資料
-              newFoodList.add(
-                FoodItem(
-                  id: docId,
-                  name: foodName,
-                  calories:
-                      '${totalCalories.toStringAsFixed(0)} 大卡', // 自動填入計算後的總熱量
-                  imagePath: imgUrl, // 填入圖片網址
-                  grams: totalGrams.toStringAsFixed(1),
-                  protein: totalProtein.toStringAsFixed(1),
-                  carbs: totalCarbs.toStringAsFixed(1),
-                  fat: totalFat.toStringAsFixed(1),
-                  ingredients: ingredientsList,
-                  remark: data['備註'] ?? '', // 讀取使用者的紀錄
-                  aiSuggestion: suggestion, // 讀取AI建議
-                ),
-              );
+            } catch (e) {
+              print("處理資料錯誤: $e");
             }
-          } catch (e) {
-            print("處理資料錯誤: $e");
-          }
 
-          if (mounted) {
-            setState(() {
-              _foodList = newFoodList;
-              _isLoading = false; // 關閉轉圈圈
-            });
-          }
-        });
+            if (mounted) {
+              setState(() {
+                _foodList = newFoodList;
+                _isLoading = false; // 讀取完成，關閉轉圈
+              });
+            }
+          },
+          // 加上錯誤監聽
+          onError: (error) {
+            print("Firebase 查詢錯誤: $error");
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          },
+        );
   }
 
   // 把任何形態的數字轉乘double，防止資料庫格式錯誤導致App崩潰
@@ -387,181 +439,204 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         ? 0
         : fatCalories / totalMacroCalories;
 
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 日期選擇工具
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                "${_selectedDate.year}.${_selectedDate.month.toString().padLeft(2, '0')}.${_selectedDate.day.toString().padLeft(2, '0')}",
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-              IconButton(
-                icon: Icon(
-                  Icons.calendar_month_outlined,
-                  color: Colors.grey[700],
-                ),
-                onPressed: () async {
-                  final DateTime now = DateTime.now();
-                  final DateTime fiveYearsAgo = DateTime(
-                    now.year - 5,
-                    now.month,
-                    now.day,
-                  );
-
-                  // 彈出日曆
-                  DateTime? picked = await showDatePicker(
-                    context: context,
-                    initialDate: _selectedDate.isAfter(now)
-                        ? now
-                        : _selectedDate,
-                    firstDate: fiveYearsAgo,
-                    lastDate: now,
-                  );
-
-                  if (picked != null && picked != _selectedDate) {
-                    setState(() {
-                      _selectedDate = picked;
-                      _isLoading = true; // 切換日期時，先轉圈圈
-                    });
-
-                    // 選完日期後，重新去Firebase中抓取那天的資料
-                    _listenToFirebaseData();
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-
-          // 圓餅圖
-          Center(
-            child: SizedBox(
-              width: 200,
-              height: 200,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  PieChart(
-                    PieChartData(
-                      sectionsSpace: 0,
-                      centerSpaceRadius: 80,
-                      sections: [
-                        PieChartSectionData(
-                          color: Colors.blue,
-                          value: proteinRingPercent * 100,
-                          radius: 40,
-                          showTitle: false,
-                        ),
-                        PieChartSectionData(
-                          color: Colors.green,
-                          value: carbRingPercent * 100,
-                          radius: 40,
-                          showTitle: false,
-                        ),
-                        PieChartSectionData(
-                          color: Colors.orange,
-                          value: fatRingPercent * 100,
-                          radius: 40,
-                          showTitle: false,
-                        ),
-                        PieChartSectionData(
-                          color: Colors.grey[200],
-                          value: totalMacroCalories == 0
-                              ? 100
-                              : (100 -
-                                        (proteinRingPercent +
-                                                carbRingPercent +
-                                                fatRingPercent) *
-                                            100)
-                                    .clamp(0, 100),
-                          radius: 20,
-                          showTitle: false,
-                        ),
-                      ],
-                    ),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 日期選擇工具
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  "${_selectedDate.year}.${_selectedDate.month.toString().padLeft(2, '0')}.${_selectedDate.day.toString().padLeft(2, '0')}",
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
                   ),
-                  Center(
-                    child: totalMacroCalories == 0
-                        ? Text(
-                            '尚未攝取\n(0%)',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey[700],
-                              fontSize: 14,
-                            ),
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                '蛋白質: ${(proteinRingPercent * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              Text(
-                                '碳水: ${(carbRingPercent * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              Text(
-                                '脂肪: ${(fatRingPercent * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ],
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.calendar_month_outlined,
+                    color: Colors.grey[700],
+                  ),
+                  onPressed: () async {
+                    final DateTime now = DateTime.now();
+                    final DateTime fiveYearsAgo = DateTime(
+                      now.year - 5,
+                      now.month,
+                      now.day,
+                    );
+
+                    // 彈出日曆
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate.isAfter(now)
+                          ? now
+                          : _selectedDate,
+                      firstDate: fiveYearsAgo,
+                      lastDate: now,
+                    );
+
+                    if (picked != null && picked != _selectedDate) {
+                      setState(() {
+                        _selectedDate = picked;
+                        _isLoading = true; // 切換日期時，先轉圈圈
+                      });
+
+                      // 選完日期後，重新去Firebase中抓取那天的資料
+                      // --- 修正開始 ---
+                      final user = FirebaseAuth.instance.currentUser;
+                      if (user != null) {
+                        // 已經移除 UID 參數，改用全域查詢
+                        _listenToFirebaseData();
+                      }
+                      // --- 修正結束 ---
+                    }
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+
+            // 圓餅圖
+            Center(
+              child: SizedBox(
+                width: 200,
+                height: 200,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    PieChart(
+                      PieChartData(
+                        sectionsSpace: 0,
+                        centerSpaceRadius: 80,
+                        sections: [
+                          PieChartSectionData(
+                            color: Colors.blue,
+                            value: proteinRingPercent * 100,
+                            radius: 40,
+                            showTitle: false,
                           ),
-                  ),
-                ],
+                          PieChartSectionData(
+                            color: Colors.green,
+                            value: carbRingPercent * 100,
+                            radius: 40,
+                            showTitle: false,
+                          ),
+                          PieChartSectionData(
+                            color: Colors.orange,
+                            value: fatRingPercent * 100,
+                            radius: 40,
+                            showTitle: false,
+                          ),
+                          PieChartSectionData(
+                            color: Colors.grey[200],
+                            value: totalMacroCalories == 0
+                                ? 100
+                                : (100 -
+                                          (proteinRingPercent +
+                                                  carbRingPercent +
+                                                  fatRingPercent) *
+                                              100)
+                                      .clamp(0, 100),
+                            radius: 20,
+                            showTitle: false,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Center(
+                      child: totalMacroCalories == 0
+                          ? Text(
+                              '尚未攝取\n(0%)',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.grey[700],
+                                fontSize: 14,
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '蛋白質: ${(proteinRingPercent * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  '碳水: ${(carbRingPercent * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  '脂肪: ${(fatRingPercent * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              const Text(
-                '成人每日建議營養攝取量',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: () {
-                  print('設定健康目標以查看完整報告');
-                },
-                // 你的 Style 保持不變
-                style: ButtonStyle(
-                  overlayColor: WidgetStateProperty.all(Colors.transparent),
-                  foregroundColor: WidgetStateProperty.resolveWith((states) {
-                    if (states.contains(WidgetState.pressed)) {
-                      return Colors.red.shade900;
-                    }
-                    return Colors.red;
-                  }),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                const Text(
+                  '成人每日建議營養攝取量',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
-                child: const Text(
-                  '設定健康目標以查看完整報告',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    print('設定健康目標以查看完整報告');
+                  },
+                  style: ButtonStyle(
+                    overlayColor: WidgetStateProperty.all(Colors.transparent),
+                    foregroundColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.pressed)) {
+                        return Colors.red.shade900;
+                      }
+                      return Colors.red;
+                    }),
+                  ),
+                  child: const Text(
+                    '設定健康目標以查看完整報告',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
+              ],
+            ),
+            const SizedBox(height: 15),
 
-          // 營養進度條
-          _buildNutrientBar('熱量 (Calories)', Colors.red, calPercent),
-          const SizedBox(height: 15),
-          _buildNutrientBar('蛋白質 (Protein)', Colors.blue, proteinPercent),
-          const SizedBox(height: 15),
-          _buildNutrientBar('碳水化合物 (Carbs)', Colors.green, carbPercent),
-          const SizedBox(height: 15),
-          _buildNutrientBar('脂肪 (Fat)', Colors.orange, fatPercent),
-        ],
+            // 營養進度條
+            _buildNutrientBar(
+              '熱量 (Calories)',
+              const Color.fromARGB(255, 220, 123, 116),
+              calPercent,
+            ),
+            const SizedBox(height: 15),
+            _buildNutrientBar(
+              '蛋白質 (Protein)',
+              const Color.fromARGB(255, 100, 174, 235),
+              proteinPercent,
+            ),
+            const SizedBox(height: 15),
+            _buildNutrientBar(
+              '碳水化合物 (Carbs)',
+              const Color.fromARGB(255, 109, 188, 162),
+              carbPercent,
+            ),
+            const SizedBox(height: 15),
+            _buildNutrientBar(
+              '脂肪 (Fat)',
+              const Color.fromARGB(255, 245, 200, 141),
+              fatPercent,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -745,6 +820,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
                   ),
                   Text(
                     item.calories, // 顯示大卡
@@ -858,6 +935,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
   late List<Ingredient> _ingredients;
   // 宣告_isEditingName並給予初始值
   bool _isEditingName = false;
+  // 用來暫存「準備要刪除」的食材 ID
+  final List<String> _ingredientsToDelete = [];
 
   // 建立一個可自動計算所有食材總和的函式
   void _calculateTotals() {
@@ -986,6 +1065,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                 onPressed: () {
                   // 點擊時，在視窗中暫時刪除食材(目前還不會真正刪除Firebase中的資料)
                   setState(() {
+                    // 刪除前，如果它有 ID，就加入「待刪除清單」
+                    if (ingredient.id != null) {
+                      _ingredientsToDelete.add(ingredient.id!);
+                    }
                     _ingredients.removeAt(index);
                     // 刪除後會立刻重新計算總合
                     _calculateTotals();
@@ -1279,23 +1362,41 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   ),
                 ),
                 child: const Text('確定'),
-                onPressed: () {
-                  final updatedItem = FoodItem(
-                    id: widget.item.id, // ID保持不變
-                    imagePath: widget.item.imagePath, // 圖片路徑不變
-                    name: _nameController.text,
-                    calories: '${_calController.text} 大卡', // 加上單位
-                    grams: _gramController.text,
-                    protein: _proteinController.text,
-                    carbs: _carbController.text,
-                    fat: _fatController.text,
-                    ingredients: _ingredients,
-                    remark: _remarksController.text, // 把備註欄的文字儲存
-                    aiSuggestion: widget.item.aiSuggestion, // 保留AI分析建議
-                  );
+                // 連動 Firebase 的核心邏輯
+                onPressed: () async {
+                  if (widget.item.reference != null) {
+                    try {
+                      // 1. 從資料庫刪除食材
+                      for (String deleteId in _ingredientsToDelete) {
+                        print("正在從資料庫刪除食材 ID: $deleteId");
+                        await widget.item.reference!
+                            .collection('ingredients')
+                            .doc(deleteId)
+                            .delete();
+                      }
 
-                  // 2. 關閉 Dialog並把新物件回傳給_buildFoodItem
-                  Navigator.of(context).pop(updatedItem);
+                      // 2. 更新主文件 (名稱、備註)
+                      // 注意：如果您的資料庫有 'total_calories' 等欄位，請在這裡加上更新
+                      await widget.item.reference!.update({
+                        '食物名': _nameController.text,
+                        '備註': _remarksController.text,
+                        'total_calories':
+                            double.tryParse(_calController.text) ?? 0,
+                        'total_protein':
+                            double.tryParse(_proteinController.text) ?? 0,
+                        'total_carbs':
+                            double.tryParse(_carbController.text) ?? 0,
+                        'total_fat': double.tryParse(_fatController.text) ?? 0,
+                        // 強制觸發更新的時間戳記，確保 App 一定會收到通知
+                        'last_updated': FieldValue.serverTimestamp(),
+                      });
+
+                      print("資料庫更新成功！");
+                    } catch (e) {
+                      print("更新失敗: $e");
+                    }
+                  }
+                  if (mounted) Navigator.of(context).pop();
                 },
               ),
             ],
