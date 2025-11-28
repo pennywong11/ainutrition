@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'routes.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -45,15 +44,16 @@ Future<void> main() async {
     print("環境變數載入失敗: $e");
     // 如果這裡失敗，後續用到 dotenv.env 的地方都會出錯
   }
-  //await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
-  //final userCredential = await FirebaseAuth.instance.signInAnonymously();
-  //print('匿名使用者登入成功，UID: ${userCredential.user?.uid}');
 
   // 3. 初始化 Firebase 核心服務
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // 4. 初始化身份驗證 (確保在 App 運行前登入完成)
   await _initializeAuth();
+
+  //await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+  //final userCredential = await FirebaseAuth.instance.signInAnonymously();
+  //print('匿名使用者登入成功，UID: ${userCredential.user?.uid}');
   runApp(const MyApp());
 }
 

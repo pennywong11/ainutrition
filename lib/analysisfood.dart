@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -36,7 +35,7 @@ void main() async {
     }
   }
 
-  runApp(const MyApp());
+  runApp(const NutritionAnalyzer());
 }
 
 // -----------------------------------------------------------------------------
@@ -119,8 +118,8 @@ class FoodAnalysisResult {
 // 主程式 UI
 // -----------------------------------------------------------------------------
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class NutritionAnalyzer extends StatelessWidget {
+  const NutritionAnalyzer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -444,7 +443,7 @@ class _DashboardPageState extends State<DashboardPage> {
               //const SizedBox(height: 16),
               _buildControlBar(),
 
-              const SizedBox(height: 24),
+              //const SizedBox(height: 24),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
