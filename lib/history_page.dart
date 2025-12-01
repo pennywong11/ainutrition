@@ -174,6 +174,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
   }
 
+  // 此區域有改!!!
   // 移除參數，改用 _selectedDate 進行精準查詢
   void _listenToFirebaseData() {
     // 1. 切斷舊的連線，避免重複監聽
@@ -206,7 +207,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     // 3. 建立帶有時間範圍過濾的查詢
     _foodSubscription = FirebaseFirestore.instance
         .collectionGroup('analysis_records')
-        // 🔥 關鍵：只抓取 created_at 介於這段時間的資料 🔥
+        //  關鍵：只抓取 created_at 介於這段時間的資料
         .where('created_at', isGreaterThanOrEqualTo: startOfDay)
         .where('created_at', isLessThanOrEqualTo: endOfDay)
         .snapshots()
@@ -312,6 +313,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
           },
         );
   }
+  // 以上有改
 
   // 把任何形態的數字轉乘double，防止資料庫格式錯誤導致App崩潰
   double _parseToDouble(dynamic value) {
