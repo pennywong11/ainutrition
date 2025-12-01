@@ -8,6 +8,8 @@ import 'package:firebase_core/firebase_core.dart'; //Firebase核心
 import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料庫功能
 import 'firebase_options.dart'; // 引入Firebase設定檔(由FlutterFire CLI產生)
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert'; // 添加這行，為了 base64Decode
+import 'dart:typed_data'; // 添加這行，為了 Uint8List
 
 // 加註解來進行pull request
 // ----------------------------------------------
@@ -225,7 +227,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 // --- 以下是原本的讀取邏輯 (直接複製您的原本代碼即可) ---
                 String docId = doc.id;
                 String suggestion = data['AI分析建議'] ?? '';
-                String imgUrl = data['圖片網址'] ?? '';
+                String imgUrl =
+                    data['圖片_base64'] ?? data['圖片網址'] ?? ''; // 12/1有改
 
                 List<Ingredient> ingredientsList = [];
                 double totalGrams = 0;
@@ -620,7 +623,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               ),
             ),
             const SizedBox(height: 20),
-            Row(
+            /* Row(
               children: [
                 const Text(
                   '成人每日建議營養攝取量',
@@ -646,7 +649,39 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                   ),
                 ),
               ],
+            ),*/
+            Row(
+              children: [
+                Expanded(
+                  // 添加 Expanded
+                  child: Text(
+                    '成人每日建議營養攝取量',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 8), // 添加一些間距
+                TextButton(
+                  onPressed: () {
+                    print('設定健康目標以查看完整報告');
+                  },
+                  style: ButtonStyle(
+                    overlayColor: WidgetStateProperty.all(Colors.transparent),
+                    foregroundColor: WidgetStateProperty.resolveWith((states) {
+                      if (states.contains(WidgetState.pressed)) {
+                        return Colors.red.shade900;
+                      }
+                      return Colors.red;
+                    }),
+                  ),
+                  child: const Text(
+                    '設定目標', // 缩短文本
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ),
+
+            //新增解決溢出問題
             const SizedBox(height: 15),
 
             // 營養進度條
@@ -789,7 +824,49 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // 單一食物項目
   Widget _buildFoodItem(BuildContext context, FoodItem item) {
-    print("檢查圖片網址：[${item.imagePath}]");
+    print("檢查圖片資料：[${item.imagePath}]");
+
+    // 解碼 Base64 圖片（如果存在）
+    Uint8List? imageBytes;
+    Widget imageWidget;
+
+    // 檢查是否是 Base64 圖片
+    if (item.imagePath.startsWith('data:image') ||
+        (item.imagePath.length > 1000 && !item.imagePath.startsWith('http'))) {
+      // 可能是 Base64 圖片
+      try {
+        final base64String = item.imagePath.replaceFirst(
+          'data:image/jpeg;base64,',
+          '',
+        );
+        imageBytes = base64Decode(base64String);
+        imageWidget = Image.memory(
+          imageBytes,
+          fit: BoxFit.cover,
+          width: 60,
+          height: 60,
+        );
+        print('✅ 顯示 Base64 圖片');
+      } catch (e) {
+        print('❌ Base64 解碼錯誤: $e');
+        imageWidget = _buildImagePlaceholder();
+      }
+    } else if (item.imagePath.startsWith('http')) {
+      // 網路圖片
+      imageWidget = Image.network(
+        item.imagePath,
+        fit: BoxFit.cover,
+        width: 60,
+        height: 60,
+        errorBuilder: (context, error, stackTrace) {
+          return _buildImagePlaceholder();
+        },
+      );
+    } else {
+      // 預設圖標
+      imageWidget = _buildImagePlaceholder();
+    }
+
     return InkWell(
       onTap: () async {
         // 點擊後跳出彈窗顯示詳情
@@ -813,19 +890,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 width: 60,
                 height: 60,
                 color: Colors.grey[200],
-                // 圖片判斷邏輯
-                child: item.imagePath.startsWith('http')
-                    ? Image.network(
-                        item.imagePath,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            Icons.broken_image,
-                            color: Colors.grey,
-                          );
-                        },
-                      )
-                    : const Icon(Icons.restaurant, color: Colors.grey),
+                child: imageWidget,
               ),
             ),
             const SizedBox(width: 12),
@@ -906,6 +971,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         ),
       ),
     );
+  }
+
+  // 圖片佔位符
+  Widget _buildImagePlaceholder() {
+    return const Icon(Icons.restaurant, color: Colors.grey);
   }
 
   Future<FoodItem?> _showFoodEditDialog(

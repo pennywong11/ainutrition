@@ -45,3 +45,27 @@ app.*.map.json
 /android/app/release
 
 .env
+# 補充這些到你的 .gitignore 中：
+
+# Firebase 設定檔
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+
+# Flutter 自動生成檔案
+.flutter-plugins
+.packages
+pubspec.lock
+
+# Android 特定
+android/local.properties
+android/**/GeneratedPluginRegistrant.java
+
+# iOS 特定
+ios/Pods/
+ios/Runner.xcworkspace/
+ios/Flutter/Flutter.podspec
+
+# 開發環境
+.vscode/
+.idea/

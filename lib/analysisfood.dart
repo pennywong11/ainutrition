@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
+import 'services/google_drive_service.dart'; // 新增這行
 
 // 重要：這裡要引入你 configure 產生的設定檔
 import 'firebase_options.dart';
@@ -115,7 +117,7 @@ class FoodAnalysisResult {
 }
 
 // -----------------------------------------------------------------------------
-// 主程式 UI
+// 主程式 UI - 完全修復版本 (解決所有 Flex 溢出問題)
 // -----------------------------------------------------------------------------
 
 class NutritionAnalyzer extends StatelessWidget {
@@ -219,18 +221,259 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // 3. 選擇圖片
-  Future<void> _pickImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+  // 3. 圖片選擇功能 - 三選一版本
+  Future<void> _showImagePickerOptions() async {
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android) {
+      await _showMobileImagePicker();
+    } else {
+      await _pickImageFromGallery();
+    }
+  }
 
-    if (image != null) {
+  Future<void> _showMobileImagePicker() async {
+    final result = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  '選擇圖片方式',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.teal),
+                title: const Text('拍照'),
+                onTap: () => Navigator.pop(context, 1),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.teal),
+                title: const Text('上傳照片'),
+                onTap: () => Navigator.pop(context, 2),
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder, color: Colors.teal),
+                title: const Text('選擇檔案'),
+                onTap: () => Navigator.pop(context, 3),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, 0),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey,
+                      side: const BorderSide(color: Colors.grey),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('取消'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    switch (result) {
+      case 1:
+        await _takePhotoWithCamera();
+        break;
+      case 2:
+        await _pickImageFromGallery();
+        break;
+      case 3:
+        await _pickImageFromFiles();
+        break;
+    }
+  }
+
+  Future<void> _takePhotoWithCamera() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        await _showImagePreview(image);
+      }
+    } catch (e) {
+      print("拍照錯誤: $e");
+      _showErrorDialog("無法開啟相機，請檢查權限設定");
+    }
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        _handleSelectedImage(image);
+      }
+    } catch (e) {
+      print("選擇照片錯誤: $e");
+      _showErrorDialog("無法存取相簿");
+    }
+  }
+
+  Future<void> _pickImageFromFiles() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        _handleSelectedImage(image);
+      }
+    } catch (e) {
+      print("選擇檔案錯誤: $e");
+      _showErrorDialog("無法存取檔案");
+    }
+  }
+
+  Future<void> _showImagePreview(XFile image) async {
+    final bytes = await image.readAsBytes();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          '確認照片',
+          style: TextStyle(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.3),
+                    spreadRadius: 1,
+                    blurRadius: 5,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  bytes,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('重拍'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text('使用此照片'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      _handleSelectedImage(image);
+    } else {
+      await _takePhotoWithCamera();
+    }
+  }
+
+  void _handleSelectedImage(XFile image) async {
+    try {
       final bytes = await image.readAsBytes();
+
       setState(() {
         _selectedImage = image;
         _imageBytes = bytes;
         _analysisResult = null;
       });
+
+      _showSnackBar('圖片選擇成功！', isSuccess: true);
+      print('圖片已選擇: ${image.name}');
+    } catch (e) {
+      print("處理圖片錯誤: $e");
+      _showErrorDialog("處理圖片時發生錯誤");
     }
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('錯誤'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('確定'),
+          ),
+        ],
+      ),
+    );
   }
 
   // 4. 重置/取消
@@ -248,9 +491,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _analyzeImage() async {
     if (_imageBytes == null) return;
     if (!_isApiKeyLoaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('錯誤：找不到 API Key，請檢查 .env 設定')),
-      );
+      _showSnackBar('錯誤：找不到 API Key,請檢查 .env 設定');
       return;
     }
 
@@ -320,68 +561,72 @@ class _DashboardPageState extends State<DashboardPage> {
             dishName: data['dish_name'] ?? '未知食物',
             aiSummary: data['summary'] ?? '無法產生總結',
             ingredients: ingredients,
-            analyzedTime: DateTime.now(), // 這裡加入當前時間
+            analyzedTime: DateTime.now(),
           );
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('分析失敗: $e')));
+      _showSnackBar('分析失敗: $e');
       if (kDebugMode) {
         print("分析錯誤: $e");
       }
     } finally {
-      setState(() {
-        _isAnalyzing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
+        });
+      }
     }
   }
 
   // 6. 儲存到 Firestore (修改重點：修正 UID 檢查與資料庫結構)
   Future<void> _saveToFirestore() async {
-    // 修改 1: 不只檢查 _user 變數，直接檢查 FirebaseAuth 的核心實例
-    // 這樣可以避免因為 UI 狀態沒更新而導致誤判為未登入
     final currentUser = FirebaseAuth.instance.currentUser;
-
     if (currentUser == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('錯誤：系統偵測到尚未登入，請重啟 App 再試')));
+      _showSnackBar('錯誤：系統偵測到尚未登入');
       return;
     }
 
-    if (_analysisResult == null) return;
+    if (_analysisResult == null || _imageBytes == null) return;
+
+    setState(() {
+      _isAnalyzing = true;
+    });
 
     try {
-      // 修改 2: 資料庫結構調整
-      // 目標結構: users -> uid -> analysis_records -> (doc) -> ingredients -> (sub-collection docs)
+      // 簡單的 Base64 編碼
+      String base64Image = base64Encode(_imageBytes!);
 
-      // A. 建立 analysis_records 文件的參考
+      // 如果圖片太大，簡單壓縮（可選）
+      if (_imageBytes!.length > 800000) {
+        // 大於 800KB
+        print('⚠️ 圖片較大，進行簡單壓縮');
+        // 這裡可以添加壓縮邏輯，或直接取部分資料
+        base64Image = base64Encode(_imageBytes!.sublist(0, 800000));
+      }
+
       final recordRef = FirebaseFirestore.instance
           .collection('users')
           .doc(currentUser.uid)
-          .collection('analysis_records') // 改為 analysis_records
-          .doc(); // 自動產生 RecordId
+          .collection('analysis_records')
+          .doc();
 
-      // B. 準備批次寫入 (Batch Write) 以確保資料完整性
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
-      // C. 設定主文件資料 (符合你的描述：AI分析建議, 食物名)
-      batch.set(recordRef, {
-        'AI分析建議': _analysisResult!.aiSummary, // 欄位名稱改成中文
-        '食物名': _analysisResult!.dishName, // 欄位名稱改成中文
-        'created_at': FieldValue.serverTimestamp(), // 加上系統時間戳記以利排序
-        'analyzed_date_string': _formatDateTime(
-          _analysisResult!.analyzedTime,
-        ), // 儲存字串格式的時間備用
-        // 也可以存總營養素方便列表顯示，不存也可以
+      // 儲存資料（包含 Base64 圖片）
+      final recordData = {
+        'AI分析建議': _analysisResult!.aiSummary,
+        '食物名': _analysisResult!.dishName,
+        '圖片_base64': base64Image, // !!
+        'created_at': FieldValue.serverTimestamp(),
+        'analyzed_date_string': _formatDateTime(_analysisResult!.analyzedTime),
         'total_calories': _analysisResult!.totalCalories,
-      });
+      };
 
-      // D. 將食材寫入 ingredients 子集合
+      batch.set(recordRef, recordData);
+
+      // 儲存食材
       for (var ingredient in _analysisResult!.ingredients) {
-        // 只儲存被選中的食材
         if (ingredient.isSelected) {
           DocumentReference ingredientDoc = recordRef
               .collection('ingredients')
@@ -390,19 +635,17 @@ class _DashboardPageState extends State<DashboardPage> {
         }
       }
 
-      // E. 提交寫入
       await batch.commit();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('資料已成功儲存！'), backgroundColor: Colors.teal),
-      );
+      _showSnackBar('分析結果已成功儲存！', isSuccess: true);
+      print('✅ 資料儲存完成，包含 Base64 圖片');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('儲存失敗: $e')));
-      if (kDebugMode) {
-        print("儲存錯誤: $e");
+      _showSnackBar('儲存失敗: $e');
+      print("儲存錯誤: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAnalyzing = false;
+        });
       }
     }
   }
@@ -413,68 +656,75 @@ class _DashboardPageState extends State<DashboardPage> {
     return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
   }
 
+  // Web 優化的 SnackBar 顯示
+  void _showSnackBar(String message, {bool isSuccess = false}) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isSuccess ? Colors.teal : null,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              //const Text(
-              //'AI 營養追蹤儀表板',
-              //style: TextStyle(
-              //fontSize: 28,
-              //fontWeight: FontWeight.bold,
-              //color: Color(0xFF1E5E5B),
-              //),
-              //),
-              //const SizedBox(height: 30),
-              //const Text(
-              //'餐點 AI 分析',
-              //style: TextStyle(
-              //fontSize: 20,
-              //fontWeight: FontWeight.bold,
-              //color: Colors.black87,
-              //),
-              //),
-              //const SizedBox(height: 16),
-              _buildControlBar(),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final screenWidth = constraints.maxWidth;
+            final isMobile = screenWidth < 600;
 
-              //const SizedBox(height: 24),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    bool isWide = constraints.maxWidth > 800;
-                    return isWide ? _buildWideLayout() : _buildMobileLayout();
-                  },
-                ),
+            return Container(
+              constraints: const BoxConstraints(maxWidth: 1400),
+              padding: isMobile
+                  ? const EdgeInsets.all(16)
+                  : const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 控制欄
+                  _buildControlBar(isMobile),
+
+                  const SizedBox(height: 24),
+
+                  // 主要內容區域 - 最終修正版本
+                  Expanded(child: _buildMainContent(isMobile)),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildControlBar() {
-    return Row(
-      children: [
-        OutlinedButton.icon(
-          onPressed: _pickImage,
-          icon: const Icon(Icons.camera_alt_outlined),
-          label: Text(_selectedImage == null ? '選擇餐點' : '更換照片'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.teal,
-            side: const BorderSide(color: Colors.teal),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+  Widget _buildControlBar(bool isMobile) {
+    if (isMobile) {
+      return Column(
+        children: [
+          // 圖片選擇按鈕
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _showImagePickerOptions,
+              icon: const Icon(Icons.camera_alt_outlined),
+              label: Text(_selectedImage == null ? '選擇餐點' : '更換照片'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.teal,
+                side: const BorderSide(color: Colors.teal),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: TextField(
+          const SizedBox(height: 12),
+
+          // 文字輸入框
+          TextField(
             controller: _promptController,
             decoration: InputDecoration(
               hintText: '輸入餐點名稱或細節提示詞 (可選)',
@@ -489,69 +739,251 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 16),
-        TextButton(
-          onPressed: _resetAll,
-          child: const Text('取消', style: TextStyle(color: Colors.grey)),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton(
-          onPressed: (_imageBytes != null && !_isAnalyzing && _isApiKeyLoaded)
-              ? _analyzeImage
-              : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: (_imageBytes != null && _isApiKeyLoaded)
-                ? Colors.teal
-                : Colors.grey[300],
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          child: _isAnalyzing
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
+          const SizedBox(height: 12),
+
+          // 按鈕列
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: _resetAll,
+                  child: const Text('取消', style: TextStyle(color: Colors.grey)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed:
+                      (_imageBytes != null && !_isAnalyzing && _isApiKeyLoaded)
+                      ? _analyzeImage
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: (_imageBytes != null && _isApiKeyLoaded)
+                        ? Colors.teal
+                        : Colors.grey[300],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                )
-              : const Text('開始分析'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWideLayout() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(flex: 4, child: _buildImageSection()),
-        const SizedBox(width: 24),
-        Expanded(flex: 6, child: _buildResultSection()),
-      ],
-    );
-  }
-
-  Widget _buildMobileLayout() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          SizedBox(height: 300, child: _buildImageSection()),
-          const SizedBox(height: 24),
-          _buildResultSection(),
+                  child: _isAnalyzing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('開始分析'),
+                ),
+              ),
+            ],
+          ),
         ],
-      ),
-    );
+      );
+    } else {
+      // 修復桌面版控制欄溢出問題
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final availableWidth = constraints.maxWidth;
+          final isCompact = availableWidth < 800;
+
+          if (isCompact) {
+            // 緊湊佈局：垂直排列
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _showImagePickerOptions,
+                      icon: const Icon(Icons.camera_alt_outlined),
+                      label: Text(_selectedImage == null ? '選擇餐點' : '更換照片'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.teal,
+                        side: const BorderSide(color: Colors.teal),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: _resetAll,
+                        child: const Text(
+                          '取消',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed:
+                          (_imageBytes != null &&
+                              !_isAnalyzing &&
+                              _isApiKeyLoaded)
+                          ? _analyzeImage
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            (_imageBytes != null && _isApiKeyLoaded)
+                            ? Colors.teal
+                            : Colors.grey[300],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      child: _isAnalyzing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text('開始分析'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _promptController,
+                  decoration: InputDecoration(
+                    hintText: '輸入餐點名稱或細節提示詞 (可選)',
+                    hintStyle: TextStyle(color: Colors.grey[400]),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: Colors.grey[300]!),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          } else {
+            // 正常佈局：水平排列
+            return Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _showImagePickerOptions,
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: Text(_selectedImage == null ? '選擇餐點' : '更換照片'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal,
+                    side: const BorderSide(color: Colors.teal),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextField(
+                    controller: _promptController,
+                    decoration: InputDecoration(
+                      hintText: '輸入餐點名稱或細節提示詞 (可選)',
+                      hintStyle: TextStyle(color: Colors.grey[400]),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                TextButton(
+                  onPressed: _resetAll,
+                  child: const Text('取消', style: TextStyle(color: Colors.grey)),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed:
+                      (_imageBytes != null && !_isAnalyzing && _isApiKeyLoaded)
+                      ? _analyzeImage
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: (_imageBytes != null && _isApiKeyLoaded)
+                        ? Colors.teal
+                        : Colors.grey[300],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: _isAnalyzing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('開始分析'),
+                ),
+              ],
+            );
+          }
+        },
+      );
+    }
   }
 
+  // 主要內容區域 - 最終修正版本
+  Widget _buildMainContent(bool isMobile) {
+    if (isMobile) {
+      // 手機版：整個內容區域滾動（圖片 + 結果）
+      return SingleChildScrollView(
+        child: Column(
+          children: [
+            // 圖片區域 - 固定高度
+            Container(height: 250, child: _buildImageSection()),
+            const SizedBox(height: 20),
+            // 結果區域 - 自然擴展
+            _buildResultSection(true),
+          ],
+        ),
+      );
+    } else {
+      // 桌面版：只有結果區域滾動，圖片固定顯示
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 圖片區域 - 固定高度
+          Expanded(flex: 4, child: _buildImageSection()),
+          const SizedBox(width: 24),
+          // 結果區域 - 可滾動
+          Expanded(
+            flex: 6,
+            child: SingleChildScrollView(child: _buildResultSection(false)),
+          ),
+        ],
+      );
+    }
+  }
+
+  // 圖片區域
   Widget _buildImageSection() {
     return Container(
-      width: double.infinity,
-      height: double.infinity,
       decoration: BoxDecoration(
         color: const Color(0xFFF0F4F5),
         borderRadius: BorderRadius.circular(12),
@@ -559,21 +991,33 @@ class _DashboardPageState extends State<DashboardPage> {
       child: _imageBytes != null
           ? ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+              child: Image.memory(
+                _imageBytes!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: double.infinity,
+              ),
             )
-          : DottedBorder(
-              color: Colors.grey[400]!, // 已移除，避免編譯錯誤
-              strokeWidth: 2.0,
-              dashPattern: const [6.0, 6.0],
-              borderType: BorderType.RRect,
-              radius: const Radius.circular(12),
+          : Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.grey[400]!,
+                  style: BorderStyle.solid,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: const Center(
-                child: Text(
-                  '上傳圖片或輸入名稱以開始分析',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 16,
-                    fontStyle: FontStyle.italic,
+                child: Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text(
+                    '上傳圖片或輸入名稱以開始分析',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 16,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ),
               ),
@@ -581,11 +1025,12 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildResultSection() {
+  // 結果區域
+  Widget _buildResultSection(bool isMobile) {
     if (_analysisResult == null) {
       return Container(
         width: double.infinity,
-        height: 400,
+        height: 400, //
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -605,7 +1050,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -617,275 +1062,379 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start, // 調整對齊
-            children: [
-              Expanded(
-                // 使用 Expanded 避免文字溢出
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _analysisResult!.dishName,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    // 新增：顯示日期時間
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatDateTime(_analysisResult!.analyzedTime),
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.edit_outlined, color: Colors.teal),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+      child: Padding(
+        padding: isMobile ? const EdgeInsets.all(16) : const EdgeInsets.all(24),
+        child: _buildResultContent(isMobile),
+      ),
+    );
+  }
 
-          Row(
-            children: [
-              Expanded(
-                child: _buildSummaryCard(
-                  '總克數 (g)',
-                  '${_analysisResult!.totalWeight.toStringAsFixed(1)} g',
-                  Colors.black87,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildSummaryCard(
-                  '熱量 (kcal)',
-                  '${_analysisResult!.totalCalories.toStringAsFixed(1)} kcal',
-                  Colors.redAccent,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildNutrientCard(
-                  '蛋白質',
-                  '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-                  Colors.blue,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildNutrientCard(
-                  '碳水化合物',
-                  '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-                  Colors.green,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildNutrientCard(
-                  '脂肪',
-                  '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-                  Colors.orange,
-                ),
-              ),
-            ],
-          ),
+  // 結果內容
+  Widget _buildResultContent(bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 標題區域
+        _buildTitleSection(isMobile),
+        const SizedBox(height: 16),
 
-          const SizedBox(height: 24),
-          Text(
-            'AI 總結食材清單 (${_analysisResult!.ingredients.length} 項)',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+        // 營養摘要卡片
+        _buildNutritionSummary(isMobile),
+        const SizedBox(height: 16),
+
+        // 營養素卡片
+        _buildNutrientCards(isMobile),
+        const SizedBox(height: 20),
+
+        // 食材清單標題
+        Text(
+          'AI 總結食材清單 (${_analysisResult!.ingredients.length} 項)',
+          style: TextStyle(
+            fontSize: isMobile ? 14 : 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
           ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(Icons.restaurant_menu, size: 14, color: Colors.blue[300]),
-              const SizedBox(width: 4),
-              Text(
-                '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-                style: TextStyle(fontSize: 12, color: Colors.blue[300]),
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.eco, size: 14, color: Colors.green[300]),
-              const SizedBox(width: 4),
-              Text(
-                '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-                style: TextStyle(fontSize: 12, color: Colors.green[300]),
-              ),
-              const SizedBox(width: 12),
-              Icon(Icons.water_drop, size: 14, color: Colors.orange[300]),
-              const SizedBox(width: 4),
-              Text(
-                '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-                style: TextStyle(fontSize: 12, color: Colors.orange[300]),
-              ),
-            ],
-          ),
+        ),
+        const SizedBox(height: 8),
 
-          const SizedBox(height: 12),
+        // 營養素標籤 - 修復溢出問題
+        _buildNutritionLabels(isMobile),
+        const SizedBox(height: 12),
 
-          Expanded(
-            child: ListView.separated(
-              itemCount: _analysisResult!.ingredients.length,
-              separatorBuilder: (ctx, index) => const SizedBox(height: 12),
-              itemBuilder: (ctx, index) {
-                final ingredient = _analysisResult!.ingredients[index];
-                final opacity = ingredient.isSelected ? 1.0 : 0.5;
+        // 食材清單 - 自然擴展
+        _buildIngredientsList(isMobile),
 
-                return Opacity(
-                  opacity: opacity,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF5F9F9),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.teal.withOpacity(0.1)),
-                    ),
-                    child: Row(
+        const SizedBox(height: 16),
+
+        // AI 總結
+        _buildAISummary(isMobile),
+        const SizedBox(height: 16),
+
+        // 操作按鈕 - 修復溢出問題
+        _buildActionButtons(isMobile),
+      ],
+    );
+  }
+
+  // 食材清單
+  Widget _buildIngredientsList(bool isMobile) {
+    return Column(
+      children: _analysisResult!.ingredients.map((ingredient) {
+        final opacity = ingredient.isSelected ? 1.0 : 0.5;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Opacity(
+            opacity: opacity,
+            child: Container(
+              padding: isMobile
+                  ? const EdgeInsets.all(10)
+                  : const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F9F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withOpacity(0.1)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                ingredient.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              Text(
-                                '${ingredient.weight} g • ${ingredient.calories} kcal',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  _buildMiniNutrient(
-                                    Icons.circle,
-                                    Colors.blue,
-                                    ingredient.protein,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _buildMiniNutrient(
-                                    Icons.circle,
-                                    Colors.green,
-                                    ingredient.carbs,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  _buildMiniNutrient(
-                                    Icons.circle,
-                                    Colors.orange,
-                                    ingredient.fat,
-                                  ),
-                                ],
-                              ),
-                            ],
+                        Text(
+                          ingredient.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isMobile ? 14 : 16,
                           ),
                         ),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              ingredient.isSelected = !ingredient.isSelected;
-                            });
-                          },
-                          icon: Icon(
-                            ingredient.isSelected
-                                ? Icons.remove_circle_outline
-                                : Icons.add_circle_outline,
-                            color: ingredient.isSelected
-                                ? Colors.red[300]
-                                : Colors.teal,
-                            size: 28,
+                        Text(
+                          '${ingredient.weight} g • ${ingredient.calories} kcal',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: isMobile ? 12 : 13,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        // 修復營養素標籤溢出 - 使用 Wrap
+                        Wrap(
+                          spacing: isMobile ? 6 : 8,
+                          children: [
+                            _buildMiniNutrient(
+                              Icons.circle,
+                              Colors.blue,
+                              ingredient.protein,
+                              isMobile,
+                            ),
+                            _buildMiniNutrient(
+                              Icons.circle,
+                              Colors.green,
+                              ingredient.carbs,
+                              isMobile,
+                            ),
+                            _buildMiniNutrient(
+                              Icons.circle,
+                              Colors.orange,
+                              ingredient.fat,
+                              isMobile,
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.blueGrey[50],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.auto_awesome, color: Colors.amber, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _analysisResult!.aiSummary,
-                    style: const TextStyle(color: Colors.black87, fontSize: 13),
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        ingredient.isSelected = !ingredient.isSelected;
+                      });
+                    },
+                    icon: Icon(
+                      ingredient.isSelected
+                          ? Icons.remove_circle_outline
+                          : Icons.add_circle_outline,
+                      color: ingredient.isSelected
+                          ? Colors.red[300]
+                          : Colors.teal,
+                      size: isMobile ? 24 : 28,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _resetAll,
-                icon: const Icon(Icons.cancel_outlined, size: 18),
-                label: const Text('取消'),
-                style: OutlinedButton.styleFrom(foregroundColor: Colors.grey),
+                ],
               ),
-              const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _saveToFirestore,
-                icon: const Icon(Icons.check_circle_outline, size: 18),
-                label: const Text('確定儲存'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2F857D),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // 標題區域
+  Widget _buildTitleSection(bool isMobile) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _analysisResult!.dishName,
+                style: TextStyle(
+                  fontSize: isMobile ? 20 : 24,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDateTime(_analysisResult!.analyzedTime),
+                style: TextStyle(
+                  fontSize: isMobile ? 12 : 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
+          ),
+        ),
+        if (!isMobile)
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.edit_outlined, color: Colors.teal),
+          ),
+      ],
+    );
+  }
+
+  // 營養摘要
+  Widget _buildNutritionSummary(bool isMobile) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildSummaryCard(
+            '總克數 (g)',
+            '${_analysisResult!.totalWeight.toStringAsFixed(1)} g',
+            Colors.black87,
+            isMobile,
+          ),
+        ),
+        SizedBox(width: isMobile ? 8 : 12),
+        Expanded(
+          child: _buildSummaryCard(
+            '熱量 (kcal)',
+            '${_analysisResult!.totalCalories.toStringAsFixed(1)} kcal',
+            Colors.redAccent,
+            isMobile,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 營養素
+  Widget _buildNutrientCards(bool isMobile) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildNutrientCard(
+            '蛋白質',
+            '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
+            Colors.blue,
+            isMobile,
+          ),
+        ),
+        SizedBox(width: isMobile ? 6 : 8),
+        Expanded(
+          child: _buildNutrientCard(
+            '碳水化合物',
+            '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
+            Colors.green,
+            isMobile,
+          ),
+        ),
+        SizedBox(width: isMobile ? 6 : 8),
+        Expanded(
+          child: _buildNutrientCard(
+            '脂肪',
+            '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
+            Colors.orange,
+            isMobile,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 營養素標籤 - 修復溢出問題
+  Widget _buildNutritionLabels(bool isMobile) {
+    return Wrap(
+      spacing: isMobile ? 8 : 12,
+      runSpacing: 8,
+      alignment: WrapAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.restaurant_menu,
+              size: isMobile ? 12 : 14,
+              color: Colors.blue[300],
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
+              style: TextStyle(
+                fontSize: isMobile ? 10 : 12,
+                color: Colors.blue[300],
+              ),
+            ),
+          ],
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.eco, size: isMobile ? 12 : 14, color: Colors.green[300]),
+            const SizedBox(width: 4),
+            Text(
+              '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
+              style: TextStyle(
+                fontSize: isMobile ? 10 : 12,
+                color: Colors.green[300],
+              ),
+            ),
+          ],
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.water_drop,
+              size: isMobile ? 12 : 14,
+              color: Colors.orange[300],
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
+              style: TextStyle(
+                fontSize: isMobile ? 10 : 12,
+                color: Colors.orange[300],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // AI 總結
+  Widget _buildAISummary(bool isMobile) {
+    return Container(
+      padding: isMobile ? const EdgeInsets.all(10) : const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey[50],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.auto_awesome, color: Colors.amber, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _analysisResult!.aiSummary,
+              style: TextStyle(
+                color: Colors.black87,
+                fontSize: isMobile ? 12 : 13,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, Color valueColor) {
+  // 操作按鈕 - 修復溢出問題
+  Widget _buildActionButtons(bool isMobile) {
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: isMobile ? 8 : 12,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _resetAll,
+          icon: Icon(Icons.cancel_outlined, size: isMobile ? 16 : 18),
+          label: Text('取消', style: TextStyle(fontSize: isMobile ? 14 : null)),
+          style: OutlinedButton.styleFrom(foregroundColor: Colors.grey),
+        ),
+        ElevatedButton.icon(
+          onPressed: _saveToFirestore,
+          icon: Icon(Icons.check_circle_outline, size: isMobile ? 16 : 18),
+          label: Text('確定儲存', style: TextStyle(fontSize: isMobile ? 14 : null)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2F857D),
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 16 : 20,
+              vertical: isMobile ? 10 : 12,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCard(
+    String title,
+    String value,
+    Color valueColor,
+    bool isMobile,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      padding: isMobile
+          ? const EdgeInsets.symmetric(vertical: 10, horizontal: 12)
+          : const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         color: const Color(0xFFFAFAFA),
         borderRadius: BorderRadius.circular(8),
@@ -894,12 +1443,15 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          Text(
+            title,
+            style: TextStyle(fontSize: isMobile ? 10 : 12, color: Colors.grey),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: isMobile ? 16 : 18,
               fontWeight: FontWeight.bold,
               color: valueColor,
             ),
@@ -909,9 +1461,16 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildNutrientCard(String title, String value, Color color) {
+  Widget _buildNutrientCard(
+    String title,
+    String value,
+    Color color,
+    bool isMobile,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      padding: isMobile
+          ? const EdgeInsets.symmetric(vertical: 6, horizontal: 8)
+          : const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
@@ -920,11 +1479,14 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: 11, color: color)),
+          Text(
+            title,
+            style: TextStyle(fontSize: isMobile ? 10 : 11, color: color),
+          ),
           Text(
             value,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: isMobile ? 12 : 14,
               fontWeight: FontWeight.bold,
               color: color,
             ),
@@ -934,14 +1496,23 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildMiniNutrient(IconData icon, Color color, double value) {
+  Widget _buildMiniNutrient(
+    IconData icon,
+    Color color,
+    double value,
+    bool isMobile,
+  ) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 8, color: color),
+        Icon(icon, size: isMobile ? 6 : 8, color: color),
         const SizedBox(width: 4),
         Text(
           '${value.toStringAsFixed(1)} g',
-          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+          style: TextStyle(
+            fontSize: isMobile ? 9 : 11,
+            color: Colors.grey[600],
+          ),
         ),
       ],
     );
