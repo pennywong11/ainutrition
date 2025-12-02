@@ -1,23 +1,39 @@
-// lib/auth.dart - 只包含認證UI和邏輯 (已移除 main() 和 MyApp)
-
+// lib/login.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// 假設您在 LoginPage 裡需要 http
+import 'firebase_options.dart';
+import 'package:http/http.dart' as http;
 
-// ===================================================
-// AuthPageWrapper (新的名稱)
-// 用於切換登入/註冊頁面
-// ===================================================
+//final user = FirebaseAuth.instance.currentUser;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Firebase Auth Demo',
+      //theme: ThemeData(primarySwatch: Colors.blue),
+      home: const AuthPage(),
+    );
+  }
+}
+
 class AuthPage extends StatefulWidget {
-  // <--- 重命名
   const AuthPage({super.key});
 
   @override
-  State<AuthPage> createState() => _AuthPage();
+  State<AuthPage> createState() => _AuthPageState();
 }
 
-class _AuthPage extends State<AuthPage> {
-  // <--- 調整 State 類別名稱
+class _AuthPageState extends State<AuthPage> {
   bool isLogin = true;
 
   void togglePage() {
@@ -98,9 +114,7 @@ class _LoginPageState extends State<LoginPage> {
           content: Text('歡迎回來！ $email'),
           actions: [
             TextButton(
-              // 🎯 關鍵修改點：從 '/' 改為 '/analysis'
-              onPressed: () =>
-                  Navigator.pushReplacementNamed(context, '/analysis'),
+              onPressed: () => Navigator.pushReplacementNamed(context, '/'),
               child: const Text('OK'),
             ),
           ],
@@ -168,6 +182,17 @@ class _LoginPageState extends State<LoginPage> {
                         child: const Text('登入'),
                       ),
                 const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ResetPasswordPage(),
+                      ),
+                    );
+                  },
+                  child: const Text("忘記密碼？"),
+                ),
                 TextButton(
                   onPressed: () {
                     setState(() {
@@ -244,14 +269,18 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => isLoading = true);
 
     try {
-      // ... (註冊邏輯略)
-      final credential = EmailAuthProvider.credential(
+      // 普通註冊
+      final userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      // 匿名轉永久帳號
+      /*final credential = EmailAuthProvider.credential(
         email: email,
         password: password,
       );
 
       final userCredential = await FirebaseAuth.instance.currentUser
-          ?.linkWithCredential(credential);
+      ?.linkWithCredential(credential);*/
 
       await userCredential?.user!.sendEmailVerification();
 
@@ -355,6 +384,95 @@ class _RegisterPageState extends State<RegisterPage> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ===================================================
+// 忘記密碼頁面
+// ===================================================
+class ResetPasswordPage extends StatefulWidget {
+  const ResetPasswordPage({super.key});
+
+  @override
+  State<ResetPasswordPage> createState() => _ResetPasswordPageState();
+}
+
+class _ResetPasswordPageState extends State<ResetPasswordPage> {
+  final TextEditingController emailController = TextEditingController();
+  bool isLoading = false;
+
+  Future<void> resetPassword() async {
+    final email = emailController.text.trim();
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("請輸入電子郵件")));
+      return;
+    }
+
+    setState(() => isLoading = true);
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
+      setState(() => isLoading = false);
+
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("已寄出重設密碼信"),
+          content: Text("請至信箱確認：$email"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("寄送失敗：${e.message}")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("忘記密碼")),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "重設密碼",
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 30),
+            TextField(
+              controller: emailController,
+              decoration: const InputDecoration(
+                labelText: "電子郵件",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 30),
+            isLoading
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    onPressed: resetPassword,
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    child: const Text("寄送重設密碼信"),
+                  ),
+          ],
         ),
       ),
     );
