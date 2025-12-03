@@ -1,3 +1,5 @@
+// lib/app_theme.dart
+
 import 'package:flutter/material.dart';
 
 class AppTheme {
@@ -6,9 +8,15 @@ class AppTheme {
   static const Color primaryLight = Color(0xFFF2FDF9);
 
   static ThemeData theme = ThemeData(
-    colorScheme: ColorScheme.fromSeed(seedColor: primaryDeep),
-    scaffoldBackgroundColor: primaryLight,
     useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: primaryDeep,
+    ).copyWith(
+      primary: primaryDeep,
+      surface: Colors.white,
+      background: primaryLight,
+    ),
+  scaffoldBackgroundColor: primaryLight,
 
     appBarTheme: const AppBarTheme(
       backgroundColor: primaryDeep,

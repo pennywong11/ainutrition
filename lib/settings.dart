@@ -200,7 +200,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 stream: FirebaseAuth.instance.authStateChanges(),
                 builder: (context, snapshot) {
                   final user = snapshot.data;
-                  final isLoggedIn = user != null;
+                  final isLoggedIn = user != null && user.email != null;
 
                   return Container(
                     width: double.infinity,
