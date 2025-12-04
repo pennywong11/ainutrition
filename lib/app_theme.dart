@@ -11,8 +11,12 @@ class AppTheme {
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryDeep,
-    ).copyWith(primary: primaryDeep, surface: Colors.white),
-    scaffoldBackgroundColor: primaryLight,
+    ).copyWith(
+      primary: primaryDeep,
+      surface: Colors.white,
+      background: primaryLight,
+    ),
+  scaffoldBackgroundColor: primaryLight,
 
     appBarTheme: const AppBarTheme(
       backgroundColor: primaryDeep,

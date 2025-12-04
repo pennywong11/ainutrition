@@ -32,5 +32,8 @@ app.add_middleware(
 # ↑↑↑部署前要改↑↑↑
 
 app.include_router(admin_router, prefix="/admin")  # include the user router under /users path
-# app.include_router(settings_router, prefix="/settings")  # include the settings router under /settings path
+
+# app.include_router(settings_router, prefix="/settings")  
+# include the settings router under /settings path
+
 

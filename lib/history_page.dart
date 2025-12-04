@@ -361,15 +361,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: InkWell(
-              onTap: () {},
-              child: const CircleAvatar(
-                backgroundColor: Colors.white,
-                radius: 16,
-              ),
-            ),
+          IconButton(
+            onPressed: () {
+              Navigator.pushNamed(context, '/settings');// 前往設定頁
+            },
+            icon: const Icon(Icons.settings),
           ),
         ],
       ),
