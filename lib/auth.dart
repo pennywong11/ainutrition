@@ -1,15 +1,18 @@
-// lib/login.dart
+// lib/auth.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'package:http/http.dart' as http;
 
-//final user = FirebaseAuth.instance.currentUser;
 
+//final user = FirebaseAuth.instance.currentUser;
+/*
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -25,7 +28,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
+*/
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
 
@@ -87,9 +90,9 @@ class _LoginPageState extends State<LoginPage> {
     final password = passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('請輸入帳號與密碼')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請輸入帳號與密碼')),
+      );
       return;
     }
 
@@ -121,22 +124,53 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
 
-      final token = await FirebaseAuth.instance.currentUser?.getIdToken(true);
-      print("TOKEN=$token");
+      //final token = await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      //print("TOKEN=$token");
       /*await http.get(
         Uri.parse("http://127.0.0.1:8000/admin"),
         headers: {"Authorization": "Bearer $token"},
       );*/
-      FirebaseAuth.instance.authStateChanges().listen((User? user) {
-        if (user != null) {
-          print(user.uid);
-        }
-      });
+      FirebaseAuth.instance
+        .authStateChanges()
+        .listen((User? user) {
+          if (user != null) {
+            print(user.uid);
+          }
+        });
+        
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('登入失敗：${e.message}')));
+      //ScaffoldMessenger.of(context)
+      //    .showSnackBar(SnackBar(content: Text('登入失敗：${e.message}')));
+      String msg = "";
+
+      switch (e.code) {
+        case 'invalid-email':
+          msg = '您輸入的電子郵件地址格式不正確。';
+          break;
+        case 'user-disabled':
+          msg = '您的帳戶已被停用，請聯繫管理員。';
+          break;
+        case 'invalid-credential':
+          msg = '電子郵件或密碼錯誤。請檢查您的輸入或註冊新帳戶。';
+          break;
+        case 'wrong-password':
+          msg = '密碼錯誤。請檢查您的密碼。';
+          break;
+        case 'too-many-requests':
+          msg = '登入嘗試次數過多，請稍後再試。';
+          break;
+        case 'network-request-failed':
+          msg = '網路連線錯誤，請檢查您的網路設定。';
+          break;
+        default:
+          // 對於其他未明確處理的錯誤，顯示通用訊息或原始錯誤訊息
+          msg = '登入失敗：${e.message}';
+          break;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('登入失敗：$msg')));
+      print('登入失敗：${e.code} - ${e.message}');
     }
   }
 
@@ -161,6 +195,8 @@ class _LoginPageState extends State<LoginPage> {
                     labelText: '電子郵件',
                     border: OutlineInputBorder(),
                   ),
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next, // 按 enter 跳到密碼欄
                 ),
                 const SizedBox(height: 15),
                 TextField(
@@ -170,6 +206,8 @@ class _LoginPageState extends State<LoginPage> {
                     labelText: '密碼',
                     border: OutlineInputBorder(),
                   ),
+                  textInputAction: TextInputAction.done, // Enter 觸發 onSubmitted
+                  onSubmitted: (_) => login(), //  Enter 直接登入
                 ),
                 const SizedBox(height: 30),
                 isLoading
@@ -186,9 +224,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const ResetPasswordPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const ResetPasswordPage()),
                     );
                   },
                   child: const Text("忘記密碼？"),
@@ -253,36 +289,41 @@ class _RegisterPageState extends State<RegisterPage> {
     final confirm = confirmPasswordController.text.trim();
 
     if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('請輸入所有欄位')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請輸入所有欄位')),
+      );
       return;
     }
 
     if (password != confirm) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('兩次密碼不一致')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('兩次密碼不一致')),
+      );
       return;
     }
 
     setState(() => isLoading = true);
 
     try {
-      // 普通註冊
-      final userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      if (FirebaseAuth.instance.currentUser != null &&
+          FirebaseAuth.instance.currentUser!.isAnonymous) {
+        // 匿名轉永久帳號
+        final credential = EmailAuthProvider.credential(
+          email: email,
+          password: password,
+        );
 
-      // 匿名轉永久帳號
-      /*final credential = EmailAuthProvider.credential(
-        email: email,
-        password: password,
-      );
+        final userCredential = await FirebaseAuth.instance.currentUser
+            ?.linkWithCredential(credential);
 
-      final userCredential = await FirebaseAuth.instance.currentUser
-      ?.linkWithCredential(credential);*/
-
-      await userCredential.user!.sendEmailVerification();
+        await userCredential?.user!.sendEmailVerification();
+      } 
+      else {
+        // 普通註冊
+        final userCredential = await FirebaseAuth.instance
+            .createUserWithEmailAndPassword(email: email, password: password);
+        await userCredential.user!.sendEmailVerification();
+      }
 
       setState(() {
         emailController.clear();
@@ -291,9 +332,9 @@ class _RegisterPageState extends State<RegisterPage> {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('驗證信已寄出，請前往信箱確認')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('驗證信已寄出，請前往信箱確認')),
+      );
 
       showDialog(
         context: context,
@@ -313,9 +354,31 @@ class _RegisterPageState extends State<RegisterPage> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
+      //ScaffoldMessenger.of(context)
+      //    .showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
+      String msg = "";
+
+      switch (e.code) {
+        case 'email-already-exists':
+          msg = '您提供的電子郵件地址已被使用。請嘗試使用其他電子郵件。';
+          break;
+        case 'invalid-email':
+          msg = '您輸入的電子郵件地址格式不正確。請檢查並重新輸入。';
+          break;
+        case 'invalid-password':
+          msg = '密碼無效。密碼必須至少包含六個字元。';
+          break;
+        case 'insufficient-permission':
+          msg = '您的帳戶沒有足夠的權限執行此操作。';
+          break;
+        default:
+          // 如果是其他未處理的錯誤，可以使用原始錯誤訊息或通用訊息
+          msg = '註冊失敗：${e.message}';
+          break;
+      }
+      ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
+      print('註冊失敗：${e.code} - ${e.message}');
     }
   }
 
@@ -408,9 +471,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     final email = emailController.text.trim();
 
     if (email.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("請輸入電子郵件")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("請輸入電子郵件")),
+      );
       return;
     }
 
@@ -435,9 +498,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("寄送失敗：${e.message}")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("寄送失敗：${e.message}")));
     }
   }
 
@@ -471,7 +533,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       minimumSize: const Size(double.infinity, 50),
                     ),
                     child: const Text("寄送重設密碼信"),
-                  ),
+                  )
           ],
         ),
       ),
