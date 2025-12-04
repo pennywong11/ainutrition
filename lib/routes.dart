@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'history_page.dart';
 import 'analysisfood.dart';
 import 'auth.dart';
-import 'admin_test.dart';
+import 'admin.dart';
 import 'settings.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {

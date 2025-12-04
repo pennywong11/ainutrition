@@ -282,7 +282,7 @@ class _RegisterPageState extends State<RegisterPage> {
       final userCredential = await FirebaseAuth.instance.currentUser
       ?.linkWithCredential(credential);*/
 
-      await userCredential?.user!.sendEmailVerification();
+      await userCredential.user!.sendEmailVerification();
 
       setState(() {
         emailController.clear();

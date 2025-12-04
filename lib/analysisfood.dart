@@ -965,7 +965,7 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           children: [
             // 圖片區域 - 固定高度
-            Container(height: 250, child: _buildImageSection()),
+            SizedBox(height: 250, child: _buildImageSection()),
             const SizedBox(height: 20),
             // 結果區域 - 自然擴展
             _buildResultSection(true),
