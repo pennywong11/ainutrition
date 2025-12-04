@@ -103,6 +103,102 @@ class _AdminPageState extends State<AdminPage> {
     setState(() {});
   }
 
+  // 🔴 新增使用者
+  Future<void> _createUser(String email, String password) async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken(true);
+    if (token == null) return;
+
+    final resp = await http.post(
+      Uri.parse("$apiBaseUrl/admin/create_user"),
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "email": email,
+        "password": password,
+      }),
+    );
+
+    if (resp.statusCode == 200) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("成功新增使用者${email}")),
+      );
+
+      _getUsers(); // 🔵 自動刷新列表
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("新增失敗：${resp.body}")),
+      );
+      print("Create user failed: ${resp.statusCode} - ${resp.body}");
+    }
+  }
+
+  void _showCreateUserDialog() {
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        final cs = Theme.of(context).colorScheme;
+
+        return AlertDialog(
+          title: const Text("新增使用者"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: "Email",
+                  prefixIcon: Icon(Icons.email),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: "Password",
+                  prefixIcon: Icon(Icons.lock),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              child: const Text("取消"),
+              onPressed: () => Navigator.pop(context),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                backgroundColor: cs.primary,
+                foregroundColor: cs.onPrimary,
+              ),
+              child: const Text("新增"),
+              onPressed: () async {
+                final email = emailController.text.trim();
+                final password = passwordController.text.trim();
+
+                if (email.isEmpty || password.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Email 與 Password 不可為空")),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context); // 關閉彈窗
+
+                await _createUser(email, password);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   // 🔴 刪除使用者
   Future<void> deleteUser(String uid) async {
     // 🔵 確認對話框
@@ -206,53 +302,6 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  // ---------------------------
-  // 左側 Sidebar
-  // ---------------------------
-  Widget _buildSidebar(ColorScheme cs) {
-    return SizedBox(
-      width: 260,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            _adminInfo(cs),
-
-            const SizedBox(height: 20),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    _statCard("使用者總數", "${users.length}", Icons.people, cs),
-                    const SizedBox(height: 14),
-                    _statCard("上傳數", "5,678", Icons.upload_file, cs),
-                    const SizedBox(height: 14),
-                    _statCard("活躍日", "87%", Icons.show_chart, cs),
-                    const SizedBox(height: 14),
-                    _statCard("錯誤回報", "3", Icons.bug_report, cs),
-                  ],
-                ),
-              ),
-            ),
-
-            // 固定：登出按鈕（不會捲動，貼在底部）
-            TextButton.icon(
-              onPressed: () async {
-                await FirebaseAuth.instance.signOut();
-                if (mounted) {
-                  Navigator.pushNamedAndRemoveUntil(context, "/login", (_) => false);
-                }
-              },
-              icon: const Icon(Icons.logout),
-              label: const Text("登出"),
-              style: TextButton.styleFrom(foregroundColor: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _adminInfo(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -283,9 +332,74 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  // ---------------------------
+  // 左側工具列
+  Widget _buildSidebar(ColorScheme cs) {
+    return SizedBox(
+      width: 260,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _adminInfo(cs),
+
+            const SizedBox(height: 20),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _toolButton(
+                      icon: Icons.person_add,
+                      label: "新增使用者",
+                      cs: cs,
+                      onTap: () {
+                        _showCreateUserDialog();
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    /*_toolButton(
+                      icon: Icons.admin_panel_settings,
+                      label: "設定管理員",
+                      cs: cs,
+                      onTap: () {
+                        // TODO: push route
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    _toolButton(
+                      icon: Icons.group_add,
+                      label: "新增管理員",
+                      cs: cs,
+                      onTap: () {
+                        // TODO: push route
+                      },
+                    ),*/
+                  ],
+                ),
+              ),
+            ),
+
+            // 固定：登出按鈕（不會捲動，貼在底部）
+            TextButton.icon(
+              onPressed: () async {
+                await FirebaseAuth.instance.signOut();
+                if (mounted) {
+                  Navigator.pushNamedAndRemoveUntil(context, "/login", (_) => false);
+                }
+              },
+              icon: const Icon(Icons.logout),
+              label: const Text("登出"),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // 搜尋 + 過濾
-  // ---------------------------
   Widget _buildSearchBar(ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,6 +430,22 @@ class _AdminPageState extends State<AdminPage> {
           spacing: 8,
           runSpacing: 8,
           children: [
+            // 🔵 使用者總數（像 FilterChip，但不可點）
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: cs.surfaceVariant,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.people, size: 18),
+                  const SizedBox(width: 6),
+                  Text("使用者總數：${users.length}"),
+                ],
+              ),
+            ),
             FilterChip(
               label: const Text("管理員"),
               selected: filterAdmin,
@@ -342,9 +472,7 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-  // ---------------------------
   // 使用者列表
-  // ---------------------------
   Widget _buildUserList(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(8),
@@ -376,10 +504,7 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
 
-
-  // ---------------------------
   // 使用者詳細資料顯示（右側）
-  // ---------------------------
   void _showUserDetail(BuildContext context, String uid) async {
     final token = await FirebaseAuth.instance.currentUser?.getIdToken(true);
     if (token == null) return;
@@ -460,35 +585,38 @@ class _AdminPageState extends State<AdminPage> {
     );
   }
   
-  // ---------------------------
-  // 左側統計卡片（你原本的）
-  // ---------------------------
-  Widget _statCard(String title, String value, IconData icon, ColorScheme cs) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: cs.primary,
-              borderRadius: BorderRadius.circular(10),
+  // 左側工具列樣式
+  Widget _toolButton({
+    required IconData icon,
+    required String label,
+    required ColorScheme cs,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: cs.background.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(12),
+          //border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            child: Icon(icon, color: cs.onPrimary),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title),
-              Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            ],
-          )
-        ],
+            const Spacer(),
+            Icon(Icons.chevron_right),
+          ],
+        ),
       ),
     );
   }
