@@ -638,6 +638,15 @@ class _DashboardPageState extends State<DashboardPage> {
       await batch.commit();
       _showSnackBar('分析結果已成功儲存！', isSuccess: true);
       print('✅ 資料儲存完成，包含 Base64 圖片');
+
+      // 重要：儲存完成後自動跳轉到歷史記錄頁面
+      // 延遲一小段時間，讓使用者看到成功訊息
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // 使用 Navigator 跳轉到歷史記錄頁面
+      if (mounted) {
+        Navigator.pushNamed(context, '/');
+      }
     } catch (e) {
       _showSnackBar('儲存失敗: $e');
       print("儲存錯誤: $e");
