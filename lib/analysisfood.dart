@@ -4,41 +4,11 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
-
-// 重要：這裡要引入你 configure 產生的設定檔
-import 'firebase_options.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. 載入環境變數
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    if (kDebugMode) {
-      print("錯誤：找不到 .env 檔案。請確保專案根目錄有 .env 檔案且包含 GEMINI_API_KEY");
-    }
-  }
-
-  // 2. 初始化 Firebase
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    if (kDebugMode) {
-      print("Firebase 初始化失敗: $e");
-    }
-  }
-
-  runApp(const NutritionAnalyzer());
-}
 
 // -----------------------------------------------------------------------------
 // 資料模型
@@ -115,26 +85,8 @@ class FoodAnalysisResult {
 }
 
 // -----------------------------------------------------------------------------
-// 主程式 UI
+// Dashboard Page
 // -----------------------------------------------------------------------------
-
-class NutritionAnalyzer extends StatelessWidget {
-  const NutritionAnalyzer({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        scaffoldBackgroundColor: const Color(0xFFF5F9F8),
-        useMaterial3: true,
-        fontFamily: 'Noto Sans TC',
-      ),
-      home: const DashboardPage(),
-    );
-  }
-}
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -155,7 +107,10 @@ class _DashboardPageState extends State<DashboardPage> {
   late final GenerativeModel _model;
   bool _isApiKeyLoaded = false;
 
-  // 🌟 滾動控制器：用於手機版自動滑到底部
+  // 🌟 1. 定義一個 GlobalKey 來定位「結果區塊」的位置
+  final GlobalKey _resultKey = GlobalKey();
+
+  // 雖然用 GlobalKey 滑動不需要 ScrollController，但為了讓 SingleChildScrollView 正常運作，保留它
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -168,7 +123,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     _promptController.dispose();
-    _scrollController.dispose(); // 釋放控制器
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -522,14 +477,18 @@ class _DashboardPageState extends State<DashboardPage> {
           );
         });
 
-        // 🌟 關鍵邏輯：分析完成後，自動滑動到底部顯示結果
+        // 🌟 關鍵邏輯：使用 GlobalKey 進行精準定位與滑動
         if (mounted) {
           await Future.delayed(const Duration(milliseconds: 100));
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
+
+          // 檢查 Key 是否有對應的 Widget
+          if (_resultKey.currentContext != null) {
+            // Scrollable.ensureVisible 會自動計算位置，確保該 Widget 的頂部出現在可視區域
+            Scrollable.ensureVisible(
+              _resultKey.currentContext!,
               duration: const Duration(milliseconds: 800),
               curve: Curves.easeOutQuart,
+              alignment: 0.0, // 0.0 表示對齊頂部
             );
           }
         }
@@ -627,12 +586,11 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 🟢 修改：綠色 App Bar，有返回鍵，無標題
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        title: null, // 無標題
+        iconTheme: const IconThemeData(color: Color(0xFFF2FDF9)),
+        title: null,
         centerTitle: false,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -652,7 +610,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
 
-      // 主要內容
       body: LayoutBuilder(
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
@@ -661,7 +618,6 @@ class _DashboardPageState extends State<DashboardPage> {
           return Center(
             child: Container(
               constraints: const BoxConstraints(maxWidth: 1400),
-              // 全螢幕模式時不加內距，讓圖片滿版
               padding: EdgeInsets.zero,
               child: _buildMainContent(isMobile),
             ),
@@ -671,19 +627,17 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 🌟 核心佈局：根據狀態切換顯示
   Widget _buildMainContent(bool isMobile) {
     final bool hasImage = _imageBytes != null;
     final bool hasResult = _analysisResult != null;
 
-    // 狀態 1: 初始畫面 (只有選擇圖片的區塊)
+    // 狀態 1: 初始畫面
     if (!hasImage) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600, maxHeight: 400),
-            // 重用 _buildImageSection 來顯示「上傳圖片」的虛線框
             child: InkWell(
               onTap: _showImagePickerOptions,
               child: _buildImageSection(),
@@ -694,18 +648,15 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     // 狀態 2: 已選好照片，準備分析
-    // 🟢 修改：移除黑色背景，保留圓角卡片風格，圖片改為 cover 模式佔滿
     if (hasImage && !hasResult) {
       return Column(
         children: [
-          // 圖片顯示區
           Expanded(
+            flex: 6,
             child: Padding(
-              // 加上一些邊距讓它像卡片
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Container(
                 width: double.infinity,
-                // 白底、圓角、陰影
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
@@ -717,7 +668,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ],
                 ),
-                // 裁切內部圖片為圓角
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: _buildImageSection(),
@@ -726,15 +676,25 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
 
-          // 控制區
-          Container(
-            padding: const EdgeInsets.all(16),
-            // 底部控制區背景色
-            decoration: const BoxDecoration(
-              color: Color(0xFFF5F9F8),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          Expanded(
+            flex: 4,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF5F9F8),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    _buildControlBar(isMobile),
+                  ],
+                ),
+              ),
             ),
-            child: _buildControlBar(isMobile),
           ),
         ],
       );
@@ -742,21 +702,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // 狀態 3: 顯示結果
     if (isMobile) {
-      // 手機版：圖片在上，結果在下，自動滾動
       return SingleChildScrollView(
         controller: _scrollController,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              height: 300,
+              height: 250,
               width: double.infinity,
-              color: const Color(0xFFF0F4F5), // 淺灰底色，非全黑
+              color: const Color(0xFFF0F4F5),
               child: _buildImageSection(),
             ),
 
             Container(
-              // 負位移，讓結果卡片稍微蓋住圖片一點，增加層次感
+              // 🌟 2. 這裡綁定 Key，讓程式知道這是「結果卡片」
+              key: _resultKey,
               transform: Matrix4.translationValues(0.0, -20.0, 0.0),
               decoration: const BoxDecoration(
                 color: Color(0xFFF5F9F8),
@@ -767,7 +727,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 children: [
                   _buildResultSection(true),
                   const SizedBox(height: 20),
-                  _buildControlBar(true), // 控制鈕移到底部
+                  _buildControlBar(true),
                 ],
               ),
             ),
@@ -775,7 +735,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       );
     } else {
-      // 電腦版：左右分欄
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Row(
@@ -807,19 +766,16 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 圖片區域 Widget
   Widget _buildImageSection() {
-    // 🟢 修改：如果有圖片，使用 BoxFit.cover 讓圖片填滿整個容器
     if (_imageBytes != null) {
       return Image.memory(
         _imageBytes!,
-        fit: BoxFit.cover, // 關鍵修改：佔滿邊框
+        fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
       );
     }
 
-    // 如果沒有圖片，顯示虛線框 (選擇介面)
     return DottedBorder(
       color: Colors.grey[400]!,
       strokeWidth: 2,
@@ -860,13 +816,13 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildControlBar(bool isMobile) {
     return Column(
       children: [
-        // 只有在選擇了圖片後才顯示 Prompt 輸入框
-        if (_imageBytes != null) ...[
+        if (_imageBytes != null && _analysisResult == null) ...[
           TextField(
             controller: _promptController,
             decoration: InputDecoration(
-              hintText: '輸入餐點名稱或細節 (可選)',
-              hintStyle: TextStyle(color: Colors.grey[400]),
+              hintText: '補充細節能讓估算更精準 (例：去皮、半飯、無糖...)',
+              hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+              prefixIcon: Icon(Icons.edit_note, color: Colors.teal[300]),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(color: Colors.grey[300]!),
@@ -884,7 +840,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
         Row(
           children: [
-            // 如果有圖片，顯示取消/重選按鈕
             if (_imageBytes != null)
               Expanded(
                 child: TextButton(
@@ -900,7 +855,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             if (_imageBytes != null) const SizedBox(width: 12),
 
-            // 主要按鈕
             Expanded(
               flex: 2,
               child: ElevatedButton(
@@ -952,7 +906,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 結果區域
   Widget _buildResultSection(bool isMobile) {
     if (_analysisResult == null) return const SizedBox.shrink();
 
@@ -976,7 +929,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 結果內容
   Widget _buildResultContent(bool isMobile) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1005,12 +957,10 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 食材清單
   Widget _buildIngredientsList(bool isMobile) {
     return Column(
       children: _analysisResult!.ingredients.map((ingredient) {
         final opacity = ingredient.isSelected ? 1.0 : 0.5;
-
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Opacity(
@@ -1096,7 +1046,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 標題區域
   Widget _buildTitleSection(bool isMobile) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1131,7 +1080,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 營養摘要
   Widget _buildNutritionSummary(bool isMobile) {
     return Row(
       children: [
@@ -1156,7 +1104,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 營養素
   Widget _buildNutrientCards(bool isMobile) {
     return Row(
       children: [
@@ -1190,7 +1137,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 營養素標籤 - 修復溢出問題
   Widget _buildNutritionLabels(bool isMobile) {
     return Wrap(
       spacing: isMobile ? 8 : 12,
@@ -1232,7 +1178,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // AI 總結
   Widget _buildAISummary(bool isMobile) {
     return Container(
       padding: isMobile ? const EdgeInsets.all(10) : const EdgeInsets.all(12),
@@ -1256,36 +1201,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-    );
-  }
-
-  // 操作按鈕 - 修復溢出問題
-  Widget _buildActionButtons(bool isMobile) {
-    return Wrap(
-      alignment: WrapAlignment.end,
-      spacing: isMobile ? 8 : 12,
-      runSpacing: 8,
-      children: [
-        OutlinedButton.icon(
-          onPressed: _resetAll,
-          icon: Icon(Icons.cancel_outlined, size: isMobile ? 16 : 18),
-          label: Text('取消', style: TextStyle(fontSize: isMobile ? 14 : null)),
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.grey),
-        ),
-        ElevatedButton.icon(
-          onPressed: _saveToFirestore,
-          icon: Icon(Icons.check_circle_outline, size: isMobile ? 16 : 18),
-          label: Text('確定儲存', style: TextStyle(fontSize: isMobile ? 14 : null)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2F857D),
-            foregroundColor: Colors.white,
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 16 : 20,
-              vertical: isMobile ? 10 : 12,
-            ),
-          ),
-        ),
-      ],
     );
   }
 
