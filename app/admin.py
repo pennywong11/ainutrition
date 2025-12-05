@@ -1,5 +1,11 @@
 from fastapi import FastAPI, APIRouter, Header, HTTPException, Depends
 from firebase_admin import auth, credentials
+from pydantic import BaseModel
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+
 
 router = APIRouter()
 
@@ -123,3 +129,80 @@ async def get_user_detail(uid: str, user=Depends(admin_required)):
 
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"User not found: {e}")
+
+@router.get("/get_user_by_email/")
+async def get_user_by_email(email: str, user=Depends(admin_required)):
+    """
+    只有 admin 可以透過 email 取得使用者詳細資料
+    """
+    try:
+        u = auth.get_user_by_email(email)
+
+        return {
+            "uid": u.uid,
+            "email": u.email,
+            #"phone": u.phone_number,
+            #"disabled": u.disabled,
+            "email_verified": u.email_verified,
+            #"provider": [p.provider_id for p in u.provider_data],
+            "admin": u.custom_claims.get("admin") if u.custom_claims else False,
+            "metadata": {
+                "creation_time": u.user_metadata.creation_timestamp,
+                "last_sign_in_time": u.user_metadata.last_sign_in_timestamp,
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"User not found: {e}")
+
+@router.get("/search")
+async def search_users(q: str, user=Depends(admin_required)
+):
+    """
+    - 支援模糊搜尋 email / uid
+    - q="abc" → 搜尋包含 abc 的 email 或 uid
+    """
+    q_lower = q.lower()
+    results = []
+
+    try:
+        for u in auth.list_users().iterate_all():
+            email = u.email.lower() if u.email else ""
+            uid = u.uid.lower()
+
+            if q_lower in email or q_lower in uid:
+                results.append({
+                    "uid": u.uid,
+                    "email": u.email,
+                    "admin": u.custom_claims.get("admin") if u.custom_claims else False
+                })
+
+        return {"results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+
+@router.post("/create_user")
+async def create_user(data: CreateUserRequest, user=Depends(admin_required)):
+    try:
+        user_record = auth.create_user(
+            email=data.email,
+            password=data.password
+        )
+        return {
+            "uid": user_record.uid,
+            "email": user_record.email,
+        }
+    except auth.EmailAlreadyExistsError:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create users: {e}")
+    
+@router.delete("/delete_user/{uid}")
+async def delete_user(uid: str, user=Depends(admin_required)):
+    try:
+        auth.delete_user(uid)
+        return {"msg": f"User {uid} deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete user: {e}")
+    

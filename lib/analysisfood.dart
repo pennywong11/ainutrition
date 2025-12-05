@@ -731,6 +731,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 ],
               ),
             ),
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5860dcc64a55606d27ffe8c566856fb24f997e47
           ],
         ),
       );
