@@ -117,7 +117,10 @@ class _LoginPageState extends State<LoginPage> {
           content: Text('歡迎回來！ $email'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+              onPressed: () {
+                Navigator.pop(context); // 關閉 dialog
+                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+              },
               child: const Text('OK'),
             ),
           ],
