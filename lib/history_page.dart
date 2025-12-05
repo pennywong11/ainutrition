@@ -1,7 +1,6 @@
 // 匯入 Flutter 的 Material UI 函式庫
 import 'package:flutter/material.dart';
 import 'dart:async'; // 管理StreamSubscription(監聽器的開關)
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:fl_chart/fl_chart.dart'; //圓餅圖套件
 import 'package:firebase_core/firebase_core.dart'; //Firebase核心
@@ -10,6 +9,8 @@ import 'firebase_options.dart'; // 引入Firebase設定檔(由FlutterFire CLI產
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
+import 'analysisfood.dart';
+import 'settings.dart';
 
 // 加註解來進行pull request
 // ----------------------------------------------
@@ -85,7 +86,6 @@ class _DailyTotals {
 void main() async {
   // 1. 確保Flutter引擎啟動
   WidgetsFlutterBinding.ensureInitialized();
-
   // 2. 初始化Firebase連線
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   // 3. 啟動App
@@ -129,6 +129,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   // Firebase監聽控制器(用來切換日期時關閉舊連線)
   StreamSubscription? _foodSubscription;
 
+  // 判斷是否已設定目標(先設定為false)
+  bool _isGoalSet = false;
+
   // ！！！每日營養目標(目前根據國人膳食營養素參考攝取量 / 19-30歲 / 女性)！！！
   final double _targetCalories = 2050; // 大卡
   final double _targetProtein = 50; // 克
@@ -139,6 +142,48 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   // UI顯示用的資料清單(會隨著Firebase更新而自動變動)
   List<FoodItem> _foodList = [];
   bool _isLoading = true; // 是否正在讀取資料
+
+  // 跳轉至設定頁面，並等待回傳結果
+  Future<void> _checkUserDataStatus() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (doc.exists) {
+          final data = doc.data();
+
+          // 定義什麼叫做「資料完整」：性別、年齡、身高、體重 都不可以是 null
+          bool isComplete =
+              data != null &&
+              data['gender'] != null &&
+              data['age'] != null &&
+              data['height'] != null &&
+              data['weight'] != null;
+
+          if (mounted) {
+            setState(() {
+              // 直接將檢查結果賦值給狀態
+              // 如果缺漏任一項，isComplete 就是 false，紅字就會顯示
+              _isGoalSet = isComplete;
+            });
+          }
+        } else {
+          // 如果文件根本不存在，當然也要顯示紅字
+          if (mounted) {
+            setState(() {
+              _isGoalSet = false;
+            });
+          }
+        }
+      } catch (e) {
+        print("檢查使用者資料失敗: $e");
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -171,14 +216,24 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     // 登入完成後，才開始監聽資料
     if (user != null) {
       _listenToFirebaseData(); // 把 UID 傳進去
+      _checkUserDataStatus();
     }
   }
 
-  // 此區域有改!!!
   // 移除參數，改用 _selectedDate 進行精準查詢
   void _listenToFirebaseData() {
     // 1. 切斷舊的連線，避免重複監聽
     _foodSubscription?.cancel();
+
+    // 取得當前登入的 UID
+    final currentUserUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserUid == null) {
+      print("系統：目前沒有登入使用者，無法讀取資料。");
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
 
     print("系統：切換日期至 ${_selectedDate.toString().split(' ')[0]}");
     print("系統：正在向 Firebase 請求該日期的資料...");
@@ -204,20 +259,20 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       999,
     );
 
-    // 3. 建立帶有時間範圍過濾的查詢
+    // 3. 建立帶有時間範圍過濾的查詢 - 使用正確的路徑結構
     _foodSubscription = FirebaseFirestore.instance
-        .collectionGroup('analysis_records')
-        //  關鍵：只抓取 created_at 介於這段時間的資料
+        .collection('users') // 第一層：users
+        .doc(currentUserUid) // 第二層：使用者 UID
+        .collection('analysis_records') // 第三層：分析記錄
         .where('created_at', isGreaterThanOrEqualTo: startOfDay)
         .where('created_at', isLessThanOrEqualTo: endOfDay)
+        .orderBy('created_at', descending: true) // 按時間倒序排列
         .snapshots()
         .listen(
           (snapshot) async {
             List<FoodItem> newFoodList = [];
 
             try {
-              // 4. 因為 Firebase 已經幫我們篩選好日期了，這裡直接讀取即可
-              // 不需要再寫 if (!isSameDay) continue; 了！
               for (var doc in snapshot.docs) {
                 var data = doc.data();
 
@@ -225,11 +280,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 String foodName = data['食物名'] ?? '未命名';
                 if (foodName == 'string' || foodName == '未命名') continue;
 
-                // --- 以下是原本的讀取邏輯 (直接複製您的原本代碼即可) ---
                 String docId = doc.id;
                 String suggestion = data['AI分析建議'] ?? '';
-                String imgUrl =
-                    data['圖片_base64'] ?? data['圖片網址'] ?? ''; // 12/1有改
+                String imgUrl = data['圖片_base64'] ?? data['圖片網址'] ?? '';
 
                 List<Ingredient> ingredientsList = [];
                 double totalGrams = 0;
@@ -242,6 +295,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                   var ingredientSnapshot = await doc.reference
                       .collection('ingredients')
                       .get();
+
                   for (var ingDoc in ingredientSnapshot.docs) {
                     var ingData = ingDoc.data();
                     double g = _parseToDouble(ingData['重量(g)']);
@@ -289,7 +343,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     aiSuggestion: suggestion,
                   ),
                 );
-                // --- 原本邏輯結束 ---
               }
             } catch (e) {
               print("處理資料錯誤: $e");
@@ -298,11 +351,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             if (mounted) {
               setState(() {
                 _foodList = newFoodList;
-                _isLoading = false; // 讀取完成，關閉轉圈
+                _isLoading = false;
               });
             }
           },
-          // 加上錯誤監聽
           onError: (error) {
             print("Firebase 查詢錯誤: $error");
             if (mounted) {
@@ -313,7 +365,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
           },
         );
   }
-  // 以上有改
 
   // 把任何形態的數字轉乘double，防止資料庫格式錯誤導致App崩潰
   double _parseToDouble(dynamic value) {
@@ -362,8 +413,18 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         elevation: 0,
         actions: [
           IconButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/settings');// 前往設定頁
+            onPressed: () async {
+              // 1. 改成使用與紅字按鈕一樣的 Navigator.push (或是用 await Navigator.pushNamed)
+              // 這樣才能接收 SettingsPage 回傳的 true
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+
+              // 2. 如果回傳 true，代表資料有更新，重新檢查一次狀態
+              if (result == true) {
+                _checkUserDataStatus(); // 或是直接 setState(() => _isGoalSet = true);
+              }
             },
             icon: const Icon(Icons.settings),
           ),
@@ -437,6 +498,23 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               );
             },
           ),
+        ),
+      ),
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(
+          right: 20, // 距離右邊20px
+          bottom: 25, // 距離底部100px
+        ),
+        child: FloatingActionButton.small(
+          elevation: 4,
+          backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+          child: const Icon(Icons.add, size: 20),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const DashboardPage()),
+            );
+          },
         ),
       ),
     );
@@ -527,13 +605,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                       });
 
                       // 選完日期後，重新去Firebase中抓取那天的資料
-                      // --- 修正開始 ---
                       final user = FirebaseAuth.instance.currentUser;
                       if (user != null) {
                         // 已經移除 UID 參數，改用全域查詢
                         _listenToFirebaseData();
                       }
-                      // --- 修正結束 ---
                     }
                   },
                 ),
@@ -621,61 +697,51 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               ),
             ),
             const SizedBox(height: 20),
-            /* Row(
-              children: [
-                const Text(
-                  '成人每日建議營養攝取量',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {
-                    print('設定健康目標以查看完整報告');
-                  },
-                  style: ButtonStyle(
-                    overlayColor: WidgetStateProperty.all(Colors.transparent),
-                    foregroundColor: WidgetStateProperty.resolveWith((states) {
-                      if (states.contains(WidgetState.pressed)) {
-                        return Colors.red.shade900;
-                      }
-                      return Colors.red;
-                    }),
-                  ),
-                  child: const Text(
-                    '設定健康目標以查看完整報告',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),*/
             Row(
               children: [
                 Expanded(
-                  // 添加 Expanded
                   child: Text(
                     '成人每日建議營養攝取量',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ),
-                const SizedBox(width: 8), // 添加一些間距
-                TextButton(
-                  onPressed: () {
-                    print('設定健康目標以查看完整報告');
-                  },
-                  style: ButtonStyle(
-                    overlayColor: WidgetStateProperty.all(Colors.transparent),
-                    foregroundColor: WidgetStateProperty.resolveWith((states) {
-                      if (states.contains(WidgetState.pressed)) {
-                        return Colors.red.shade900;
-                      }
-                      return Colors.red;
-                    }),
+
+                // 只有當「還沒設定好目標」時才顯示
+                if (!_isGoalSet) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () async {
+                      // 1. 跳轉到設定頁面
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SettingsPage(),
+                        ),
+                      );
+
+                      // 2. 回來後，重新檢查資料庫狀態
+                      await _checkUserDataStatus();
+                    },
+                    style: ButtonStyle(
+                      overlayColor: WidgetStateProperty.all(Colors.transparent),
+                      foregroundColor: WidgetStateProperty.resolveWith((
+                        states,
+                      ) {
+                        if (states.contains(WidgetState.pressed)) {
+                          return Colors.red.shade900;
+                        }
+                        return Colors.red;
+                      }),
+                    ),
+                    child: const Text(
+                      '設定完整健康目標以查看報告',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  child: const Text(
-                    '設定目標', // 缩短文本
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ),
+                ],
               ],
             ),
 
@@ -778,42 +844,24 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     },
                   ),
 
-            // 新增按鈕
-            Align(
-              alignment: Alignment.bottomRight,
-              child: PopupMenuButton<String>(
-                offset: const Offset(0, -140),
-                onSelected: (String value) {
-                  if (value == 'gallery') {
-                    _pickImage(ImageSource.gallery);
-                  } else if (value == 'file') {
-                    _pickImage(ImageSource.gallery);
-                  }
-                },
-                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                  const PopupMenuItem<String>(
-                    value: 'gallery',
-                    child: ListTile(
-                      leading: Icon(Icons.photo_library),
-                      title: Text('照片圖庫'),
-                    ),
-                  ),
-                  const PopupMenuItem<String>(
-                    value: 'file',
-                    child: ListTile(
-                      leading: Icon(Icons.folder_open),
-                      title: Text('選擇檔案'),
-                    ),
-                  ),
-                ],
-                child: FloatingActionButton(
-                  onPressed: null,
-                  elevation: 0,
-                  backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-                  child: const Icon(Icons.add, size: 30),
-                ),
-              ),
-            ),
+            // // 新增按鈕
+            // Align(
+            //   alignment: Alignment.bottomRight,
+            //   child: FloatingActionButton.small(
+            //     elevation: 4,
+            //     backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+            //     child: const Icon(Icons.add, size: 20),
+            //     onPressed: () {
+            //       // 跳轉頁面
+            //       Navigator.push(
+            //         context,
+            //         MaterialPageRoute(
+            //           builder: (context) => const DashboardPage(),
+            //         ),
+            //       );
+            //     },
+            //   ),
+            // ),
           ],
         ),
       ),
