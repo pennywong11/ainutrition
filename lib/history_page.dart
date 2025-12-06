@@ -5,14 +5,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:fl_chart/fl_chart.dart'; //圓餅圖套件
 import 'package:firebase_core/firebase_core.dart'; //Firebase核心
 import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料庫功能
-import 'firebase_options.dart'; // 引入Firebase設定檔(由FlutterFire CLI產生)
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
-import 'analysisfood.dart';
-import 'settings.dart';
+import 'analysisfood.dart'; // 假設 DashboardPage 在這裡
+import 'settings.dart'; // 假設 SettingsPage 在這裡
 
-// 加註解來進行pull request
 // ----------------------------------------------
 // 資料模型區(Models)：定義資料的樣子
 // ----------------------------------------------
@@ -80,38 +78,6 @@ class _DailyTotals {
 }
 
 // ----------------------------------------------
-// 主程式入口
-// ----------------------------------------------
-
-void main() async {
-  // 1. 確保Flutter引擎啟動
-  WidgetsFlutterBinding.ensureInitialized();
-  // 2. 初始化Firebase連線
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  // 3. 啟動App
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      // 設定App主題色系(偏綠)
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32)),
-        scaffoldBackgroundColor: const Color(0xFFF0FDF9),
-        useMaterial3: true,
-      ),
-      home: const NutritionHomePage(),
-      debugShowCheckedModeBanner: false, // 隱藏右上角的DEBUG標籤
-    );
-  }
-}
-
-// ----------------------------------------------
 // 首頁(儀表板+列表)
 // ----------------------------------------------
 
@@ -143,7 +109,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   List<FoodItem> _foodList = [];
   bool _isLoading = true; // 是否正在讀取資料
 
-  // 跳轉至設定頁面，並等待回傳結果
+  // 檢查使用者資料完整性
   Future<void> _checkUserDataStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -166,9 +132,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
           if (mounted) {
             setState(() {
-              // 直接將檢查結果賦值給狀態
-              // 如果缺漏任一項，isComplete 就是 false，紅字就會顯示
+              // 更新狀態：如果完整，_isGoalSet 為 true (紅字消失)
+              // 如果不完整，_isGoalSet 為 false (紅字顯示)
               _isGoalSet = isComplete;
+              print("資料完整性檢查結果: $_isGoalSet"); // Debug log
             });
           }
         } else {
@@ -193,7 +160,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     _checkLoginAndListen();
   }
 
-  // 負責處理匿名登入
+  // 負責處理匿名登入或獲取當前用戶狀態
   Future<void> _checkLoginAndListen() async {
     User? user = FirebaseAuth.instance.currentUser;
 
@@ -239,7 +206,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     print("系統：正在向 Firebase 請求該日期的資料...");
 
     // 2. 設定當天的「開始時間」與「結束時間」
-    // 例如：2025-11-24 00:00:00.000
     final DateTime startOfDay = DateTime(
       _selectedDate.year,
       _selectedDate.month,
@@ -248,7 +214,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       0,
       0,
     );
-    // 例如：2025-11-24 23:59:59.999
     final DateTime endOfDay = DateTime(
       _selectedDate.year,
       _selectedDate.month,
@@ -405,26 +370,34 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     return totals;
   }
 
+  // --- 關鍵函式：前往設定頁面並在返回時更新狀態 ---
+  Future<void> _navigateToSettings() async {
+    // 等待設定頁面關閉
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsPage()),
+    );
+
+    // !!! 關鍵修改：無論回傳什麼，只要從設定頁回來，就檢查一次狀態 !!!
+    if (mounted) {
+      print("從設定頁返回，正在重新檢查資料完整性...");
+      await _checkUserDataStatus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        // ！！！關鍵修正：隱藏預設的返回鍵 (防止首頁出現上一頁箭頭)
+        automaticallyImplyLeading: false,
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
           IconButton(
             onPressed: () async {
-              // 1. 改成使用與紅字按鈕一樣的 Navigator.push (或是用 await Navigator.pushNamed)
-              // 這樣才能接收 SettingsPage 回傳的 true
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsPage()),
-              );
-
-              // 2. 如果回傳 true，代表資料有更新，重新檢查一次狀態
-              if (result == true) {
-                _checkUserDataStatus(); // 或是直接 setState(() => _isGoalSet = true);
-              }
+              // 使用封裝好的函式
+              await _navigateToSettings();
             },
             icon: const Icon(Icons.settings),
           ),
@@ -458,7 +431,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                             ),
                           ],
                         ),
-                        child: _buildLeftColumn(context),
+                        child: _buildLeftColumn(context, true),
                       ),
                       const SizedBox(height: 16),
                       // 右邊的歷史紀錄 (移除 Expanded/Flex)
@@ -488,7 +461,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                           ),
                         ],
                       ),
-                      child: _buildLeftColumn(context),
+                      child: _buildLeftColumn(context, false),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -508,6 +481,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         child: FloatingActionButton.small(
           elevation: 4,
           backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+          foregroundColor: Colors.white,
           child: const Icon(Icons.add, size: 20),
           onPressed: () {
             Navigator.push(
@@ -521,7 +495,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   }
 
   // 左邊UI
-  Widget _buildLeftColumn(BuildContext context) {
+  Widget _buildLeftColumn(BuildContext context, bool isMobile) {
     // 在build時自動計算總合
     final _DailyTotals currentTotals = _calculateCurrentTotals();
 
@@ -628,24 +602,24 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     PieChart(
                       PieChartData(
                         sectionsSpace: 0,
-                        centerSpaceRadius: 80,
+                        centerSpaceRadius: 70,
                         sections: [
                           PieChartSectionData(
                             color: Colors.blue,
                             value: proteinRingPercent * 100,
-                            radius: 40,
+                            radius: 30,
                             showTitle: false,
                           ),
                           PieChartSectionData(
                             color: Colors.green,
                             value: carbRingPercent * 100,
-                            radius: 40,
+                            radius: 30,
                             showTitle: false,
                           ),
                           PieChartSectionData(
                             color: Colors.orange,
                             value: fatRingPercent * 100,
-                            radius: 40,
+                            radius: 30,
                             showTitle: false,
                           ),
                           PieChartSectionData(
@@ -658,7 +632,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                                                   fatRingPercent) *
                                               100)
                                       .clamp(0, 100),
-                            radius: 20,
+                            radius: 30,
                             showTitle: false,
                           ),
                         ],
@@ -697,53 +671,100 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '成人每日建議營養攝取量',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ),
-
-                // 只有當「還沒設定好目標」時才顯示
-                if (!_isGoalSet) ...[
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: () async {
-                      // 1. 跳轉到設定頁面
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SettingsPage(),
+            // 如果是手機版 (isMobile 為 true)，使用 Column (垂直排列)
+            // 如果是電腦版 (isMobile 為 false)，使用 Row (水平排列)
+            isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '成人每日建議營養攝取量',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
                         ),
-                      );
-
-                      // 2. 回來後，重新檢查資料庫狀態
-                      await _checkUserDataStatus();
-                    },
-                    style: ButtonStyle(
-                      overlayColor: WidgetStateProperty.all(Colors.transparent),
-                      foregroundColor: WidgetStateProperty.resolveWith((
-                        states,
-                      ) {
-                        if (states.contains(WidgetState.pressed)) {
-                          return Colors.red.shade900;
-                        }
-                        return Colors.red;
-                      }),
-                    ),
-                    child: const Text(
-                      '設定完整健康目標以查看報告',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
+                      // ！！這裡是控制紅字顯示的地方！！
+                      if (!_isGoalSet) ...[
+                        const SizedBox(height: 8), // 垂直間距
+                        Align(
+                          alignment: Alignment.centerLeft, // 靠左對齊
+                          child: TextButton(
+                            onPressed: () async {
+                              // 使用封裝好的函式，確保回來時刷新
+                              await _navigateToSettings();
+                            },
+                            style: ButtonStyle(
+                              padding: WidgetStateProperty.all(EdgeInsets.zero),
+                              minimumSize: WidgetStateProperty.all(Size.zero),
+                              tapTargetSize: MaterialTapTargetSize
+                                  .shrinkWrap, // 縮減點擊範圍至內容大小
+                              overlayColor: WidgetStateProperty.all(
+                                Colors.transparent,
+                              ),
+                              foregroundColor: WidgetStateProperty.resolveWith((
+                                states,
+                              ) {
+                                if (states.contains(WidgetState.pressed)) {
+                                  return const Color(0xFF7A9C99);
+                                }
+                                return const Color(0xFFA5C5C2);
+                              }),
+                            ),
+                            child: const Text(
+                              '> 設定完整健康目標以查看報告',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  )
+                : Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          '成人每日建議營養攝取量',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      if (!_isGoalSet) ...[
+                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () async {
+                            // 使用封裝好的函式，確保回來時刷新
+                            await _navigateToSettings();
+                          },
+                          style: ButtonStyle(
+                            overlayColor: WidgetStateProperty.all(
+                              Colors.transparent,
+                            ),
+                            foregroundColor: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
+                              if (states.contains(WidgetState.pressed)) {
+                                return const Color(0xFF7A9C99);
+                              }
+                              return const Color(0xFFA5C5C2);
+                            }),
+                          ),
+                          child: const Text(
+                            '> 設定完整健康目標以查看報告',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
-              ],
-            ),
 
             //新增解決溢出問題
             const SizedBox(height: 15),
@@ -843,25 +864,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                       );
                     },
                   ),
-
-            // // 新增按鈕
-            // Align(
-            //   alignment: Alignment.bottomRight,
-            //   child: FloatingActionButton.small(
-            //     elevation: 4,
-            //     backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-            //     child: const Icon(Icons.add, size: 20),
-            //     onPressed: () {
-            //       // 跳轉頁面
-            //       Navigator.push(
-            //         context,
-            //         MaterialPageRoute(
-            //           builder: (context) => const DashboardPage(),
-            //         ),
-            //       );
-            //     },
-            //   ),
-            // ),
           ],
         ),
       ),
@@ -1148,6 +1150,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     TextEditingController controller, {
     TextInputType keyboardType = TextInputType.number,
     bool enabled = true,
+    Color? backgroundColor,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1171,8 +1174,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
             decoration: InputDecoration(
               hintText: '0',
-              filled: !enabled,
-              fillColor: enabled ? Colors.transparent : Colors.grey[100],
+              filled: !enabled || backgroundColor != null,
+              fillColor: enabled
+                  ? (backgroundColor ?? Colors.transparent)
+                  : (backgroundColor ?? Colors.grey[200]),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12.0),
               ),
@@ -1238,11 +1243,23 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
           Row(
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
-              _buildMacroInfo('🌾', ingredient.carbs), // 碳水化合物
+              _buildMacroInfo(
+                Icons.eco,
+                Colors.green,
+                ingredient.carbs,
+              ), // 碳水化合物
               const SizedBox(width: 16),
-              _buildMacroInfo('🥩', ingredient.protein), // 蛋白質
+              _buildMacroInfo(
+                Icons.restaurant_menu,
+                Colors.blue,
+                ingredient.protein,
+              ), // 蛋白質
               const SizedBox(width: 16),
-              _buildMacroInfo('🧈', ingredient.fat), // 脂肪
+              _buildMacroInfo(
+                Icons.water_drop,
+                Colors.orange,
+                ingredient.fat,
+              ), // 脂肪
             ],
           ),
           Divider(height: 16, color: Colors.grey[300]), // 加分隔線
@@ -1251,14 +1268,23 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     );
   }
 
-  Widget _buildMacroInfo(String icon, double value) {
+  Widget _buildMacroInfo(IconData icon, Color color, double value) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text(icon, style: const TextStyle(fontSize: 16)),
+        Icon(
+          icon,
+          size: 16, // 圖示大小，可依需求調整
+          color: color,
+        ),
         const SizedBox(width: 4),
         Text(
-          value.toString(),
-          style: const TextStyle(fontSize: 14, color: Colors.black87),
+          '${value.toStringAsFixed(1)}g',
+          style: TextStyle(
+            color: Colors.grey[800], // 文字顏色
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+          ),
         ),
       ],
     );
@@ -1266,6 +1292,41 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
   @override
   Widget build(BuildContext context) {
+    Widget imageWidget;
+    final String path = widget.item.imagePath;
+
+    // 檢查是否是 Base64 圖片 (長度很長且不以 http 開頭，或是明確以 data:image 開頭)
+    if (path.startsWith('data:image') ||
+        (path.length > 1000 && !path.startsWith('http'))) {
+      try {
+        final base64String = path.replaceFirst('data:image/jpeg;base64,', '');
+        final Uint8List bytes = base64Decode(base64String);
+        imageWidget = Image.memory(
+          bytes,
+          fit: BoxFit.cover,
+          width: 60,
+          height: 60,
+        );
+      } catch (e) {
+        print("圖片解碼錯誤: $e");
+        imageWidget = const Icon(Icons.broken_image, color: Colors.grey);
+      }
+    }
+    // 檢查是否是網路圖片
+    else if (path.startsWith('http')) {
+      imageWidget = Image.network(
+        path,
+        fit: BoxFit.cover,
+        width: 60,
+        height: 60,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.broken_image, color: Colors.grey),
+      );
+    }
+    // 預設圖示
+    else {
+      imageWidget = const Icon(Icons.restaurant, color: Colors.grey);
+    }
     // SingleChildScrollView可確保鍵盤彈出時內容不會溢位
     return SingleChildScrollView(
       child: Column(
@@ -1281,18 +1342,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   width: 60,
                   height: 60,
                   color: Colors.grey[200],
-                  // 顯示網路圖片
-                  child: widget.item.imagePath.startsWith('http')
-                      ? Image.network(
-                          widget.item.imagePath,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                                Icons.broken_image,
-                                color: Colors.grey,
-                              ),
-                        )
-                      : const Icon(Icons.restaurant, color: Colors.grey),
+                  child: imageWidget,
                 ),
               ),
               const SizedBox(width: 16),
@@ -1447,6 +1497,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             width: double.infinity, // 填滿寬度
             padding: const EdgeInsets.all(12), // 內距，讓文字不要貼著框
             decoration: BoxDecoration(
+              color: Colors.grey[200],
               border: Border.all(color: Colors.black), //黑色邊框
               borderRadius: BorderRadius.circular(12), // 邊框變為圓角
             ),
