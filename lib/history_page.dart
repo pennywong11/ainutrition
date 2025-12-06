@@ -473,7 +473,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       appBar: AppBar(
         // ！！！關鍵修正：隱藏預設的返回鍵 (防止首頁出現上一頁箭頭)
         automaticallyImplyLeading: false,
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+        // backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
           IconButton(
