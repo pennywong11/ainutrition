@@ -605,19 +605,19 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                         centerSpaceRadius: 70,
                         sections: [
                           PieChartSectionData(
-                            color: Colors.blue,
+                            color: Color.fromARGB(255, 117, 181, 233),
                             value: proteinRingPercent * 100,
                             radius: 30,
                             showTitle: false,
                           ),
                           PieChartSectionData(
-                            color: Colors.green,
+                            color: Color.fromARGB(255, 132, 202, 206),
                             value: carbRingPercent * 100,
                             radius: 30,
                             showTitle: false,
                           ),
                           PieChartSectionData(
-                            color: Colors.orange,
+                            color: Color.fromARGB(255, 245, 190, 118),
                             value: fatRingPercent * 100,
                             radius: 30,
                             showTitle: false,
@@ -770,13 +770,25 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             const SizedBox(height: 15),
 
             // 營養進度條
-            _buildNutrientBar('熱量 (Calories)', Colors.red, calPercent),
+            _buildNutrientBar('熱量 (Calories)', Color(0xFFE96A60), calPercent),
             const SizedBox(height: 15),
-            _buildNutrientBar('蛋白質 (Protein)', Colors.blue, proteinPercent),
+            _buildNutrientBar(
+              '蛋白質 (Protein)',
+              Color.fromARGB(255, 117, 181, 233),
+              proteinPercent,
+            ),
             const SizedBox(height: 15),
-            _buildNutrientBar('碳水化合物 (Carbs)', Colors.green, carbPercent),
+            _buildNutrientBar(
+              '碳水化合物 (Carbs)',
+              Color.fromARGB(255, 132, 202, 206),
+              carbPercent,
+            ),
             const SizedBox(height: 15),
-            _buildNutrientBar('脂肪 (Fat)', Colors.orange, fatPercent),
+            _buildNutrientBar(
+              '脂肪 (Fat)',
+              Color.fromARGB(255, 245, 190, 118),
+              fatPercent,
+            ),
           ],
         ),
       ),
@@ -1244,20 +1256,20 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               _buildMacroInfo(
-                Icons.eco,
-                Colors.green,
-                ingredient.carbs,
-              ), // 碳水化合物
-              const SizedBox(width: 16),
-              _buildMacroInfo(
                 Icons.restaurant_menu,
-                Colors.blue,
+                Color.fromARGB(255, 117, 181, 233),
                 ingredient.protein,
               ), // 蛋白質
               const SizedBox(width: 16),
               _buildMacroInfo(
+                Icons.eco,
+                Color.fromARGB(255, 132, 197, 187),
+                ingredient.carbs,
+              ), // 碳水化合物
+              const SizedBox(width: 16),
+              _buildMacroInfo(
                 Icons.water_drop,
-                Colors.orange,
+                Color.fromARGB(255, 245, 190, 118),
                 ingredient.fat,
               ), // 脂肪
             ],
@@ -1539,7 +1551,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               TextButton(
                 style: TextButton.styleFrom(
                   backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-                  foregroundColor: Colors.black,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 12,
@@ -1554,7 +1566,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-                  foregroundColor: Colors.black,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
                     vertical: 12,

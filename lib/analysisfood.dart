@@ -1003,7 +1003,7 @@ class _DashboardPageState extends State<DashboardPage> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F9F9),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.teal.withOpacity(0.1)),
+                border: Border.all(color: Color(0xFFA5C5C2).withOpacity(0.1)),
               ),
               child: Row(
                 children: [
@@ -1031,19 +1031,19 @@ class _DashboardPageState extends State<DashboardPage> {
                           children: [
                             _buildMiniNutrient(
                               Icons.circle,
-                              Colors.blue,
+                              Color.fromARGB(255, 117, 181, 233),
                               ingredient.protein,
                               isMobile,
                             ),
                             _buildMiniNutrient(
                               Icons.circle,
-                              Colors.green,
+                              Color.fromARGB(255, 132, 202, 206),
                               ingredient.carbs,
                               isMobile,
                             ),
                             _buildMiniNutrient(
                               Icons.circle,
-                              Colors.orange,
+                              Color.fromARGB(255, 245, 190, 118),
                               ingredient.fat,
                               isMobile,
                             ),
@@ -1063,8 +1063,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           ? Icons.remove_circle_outline
                           : Icons.add_circle_outline,
                       color: ingredient.isSelected
-                          ? Colors.red[300]
-                          : Colors.teal,
+                          ? Color(0xFFE96A60)
+                          : Color(0xFFA5C5C2),
                       size: isMobile ? 24 : 28,
                     ),
                   ),
@@ -1142,7 +1142,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '蛋白質',
             '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-            Colors.blue,
+            Color.fromARGB(255, 117, 181, 233),
             isMobile,
           ),
         ),
@@ -1151,7 +1151,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '碳水化合物',
             '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-            Colors.green,
+            Color.fromARGB(255, 132, 202, 206),
             isMobile,
           ),
         ),
@@ -1160,7 +1160,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '脂肪',
             '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-            Colors.orange,
+            Color.fromARGB(255, 245, 190, 118),
             isMobile,
           ),
         ),
@@ -1175,19 +1175,19 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         _buildLabel(
           Icons.restaurant_menu,
-          Colors.blue[300]!,
+          Color.fromARGB(255, 117, 181, 233),
           '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.eco,
-          Colors.green[300]!,
+          Color.fromARGB(255, 132, 202, 206),
           '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.water_drop,
-          Colors.orange[300]!,
+          Color.fromARGB(255, 245, 190, 118),
           '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
           isMobile,
         ),
