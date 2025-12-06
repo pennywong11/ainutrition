@@ -98,12 +98,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   // 判斷是否已設定目標(先設定為false)
   bool _isGoalSet = false;
 
-  // ！！！每日營養目標(目前根據國人膳食營養素參考攝取量 / 19-30歲 / 女性)！！！
-  final double _targetCalories = 2050; // 大卡
-  final double _targetProtein = 50; // 克
-  final double _targetCarbs = 130; // 克
-  // 脂肪無RDA，採AMDR 20-30% 。此處取 25% * 2050大卡 / 9 = 57克
-  final double _targetFat = 57; // 克 (由AMDR 20-30%推算)
+  // 預設目標值(成人建議值)，當沒讀到資料時會顯示這些值
+  double _targetCalories = 2000;
+  double _targetProtein = 60;
+  double _targetCarbs = 300;
+  double _targetFat = 60;
 
   // UI顯示用的資料清單(會隨著Firebase更新而自動變動)
   List<FoodItem> _foodList = [];
@@ -138,6 +137,22 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               print("資料完整性檢查結果: $_isGoalSet"); // Debug log
             });
           }
+          if (isComplete) {
+            try {
+              // 從 Firestore 讀取資料 (使用 tryParse 防止格式錯誤導致當機)
+              String gender = data!['gender'].toString();
+
+              // 處理數值轉換，如果資料庫存的是 String 也能轉成 int/double
+              int age = int.tryParse(data['age'].toString()) ?? 25;
+              double height = double.tryParse(data['height'].toString()) ?? 160;
+              double weight = double.tryParse(data['weight'].toString()) ?? 50;
+
+              // 呼叫剛剛寫好的計算函式
+              _calculatePersonalizedTargets(gender, age, height, weight);
+            } catch (e) {
+              print("計算營養目標時發生錯誤: $e");
+            }
+          }
         } else {
           // 如果文件根本不存在，當然也要顯示紅字
           if (mounted) {
@@ -152,38 +167,105 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
   }
 
+  // --- 根據個人資料計算 BMR 與 TDEE ---
+  void _calculatePersonalizedTargets(
+    String gender,
+    int age,
+    double height,
+    double weight,
+  ) {
+    double bmr = 0;
+
+    // 1. 計算 BMR (基礎代謝率) - 使用 Mifflin-St Jeor 公式
+    // 公式來源參考：國際通用的代謝計算標準
+    if (gender == '男性' || gender == '男' || gender.toLowerCase() == 'male') {
+      // 男性公式: (10 × 公斤) + (6.25 × 公分) - (5 × 年齡) + 5
+      bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5;
+    } else {
+      // 女性公式: (10 × 公斤) + (6.25 × 公分) - (5 × 年齡) - 161
+      bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161;
+    }
+
+    // 2. 計算 TDEE (每日總消耗熱量)
+    double tdee = bmr * 1.2;
+
+    // 3. 設定三大營養素比例 (依照國人膳食營養素參考攝取量 DRIs 的建議範圍)
+    // 碳水化合物 50-60%, 蛋白質 10-20%, 脂肪 20-30%
+    // 這裡我們採用一個均衡的比例：
+    double proteinRatio = 0.15; // 蛋白質 15%
+    double carbsRatio = 0.55; // 碳水 55%
+    double fatRatio = 0.30; // 脂肪 30%
+
+    // 4. 更新 UI 變數 (使用 setState 觸發畫面更新)
+    if (mounted) {
+      setState(() {
+        _targetCalories = tdee;
+
+        // 蛋白質 (1克 = 4大卡)
+        _targetProtein = (_targetCalories * proteinRatio) / 4;
+
+        // 碳水化合物 (1克 = 4大卡)
+        _targetCarbs = (_targetCalories * carbsRatio) / 4;
+
+        // 脂肪 (1克 = 9大卡)
+        _targetFat = (_targetCalories * fatRatio) / 9;
+      });
+
+      print(
+        "已更新個人化目標: BMR=${bmr.toStringAsFixed(0)}, TDEE=${_targetCalories.toStringAsFixed(0)}",
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
-    // 呼叫函式來處理登入邏輯
+
+    // 一旦登入狀態改變 (登入或登出)，就會執行裡面的程式碼
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (user == null) {
+        // 情況 A：偵測到「已登出」
+        print("系統：偵測到登出，正在清除畫面資料...");
+
+        // 1. 停止監聽 Firestore 資料庫
+        _foodSubscription?.cancel();
+
+        // 2. 清空畫面上的資料
+        if (mounted) {
+          setState(() {
+            _foodList.clear(); // 清空食物列表
+            _isGoalSet = false; // 重置目標設定狀態
+            _targetCalories = 2050; // 重置回預設熱量
+            _isLoading = false; // 停止轉圈圈
+          });
+        }
+      } else {
+        // 情況 B：偵測到「已登入」 (包含剛開啟 App 或是剛完成匿名登入)
+        print("系統：偵測到使用者 ID: ${user.uid}，開始讀取資料...");
+
+        // 開始抓取這個人的資料
+        _listenToFirebaseData();
+        _checkUserDataStatus();
+      }
+    });
+
+    // 如果一開始完全沒登入，就執行匿名登入
     _checkLoginAndListen();
   }
 
-  // 負責處理匿名登入或獲取當前用戶狀態
+  // 如果沒人登入，就幫忙執行匿名登入
   Future<void> _checkLoginAndListen() async {
     User? user = FirebaseAuth.instance.currentUser;
 
-    // 如果目前沒有登入使用者 (第一次開啟App)
     if (user == null) {
       try {
-        print("系統：偵測到未登入，正在進行匿名登入...");
-        // 這行指令會向 Firebase 請求一個隨機的匿名 UID
-        UserCredential userCredential = await FirebaseAuth.instance
-            .signInAnonymously();
-        user = userCredential.user;
-        print("系統：匿名登入成功！UID: ${user?.uid}");
+        print("系統：初次檢查無使用者，正在進行匿名登入...");
+        await FirebaseAuth.instance.signInAnonymously();
+        // 登入成功後，上面的 authStateChanges 會自動感應到，並開始讀取資料
       } catch (e) {
         print("系統：登入失敗: $e");
       }
-    } else {
-      print("系統：已登入，UID: ${user.uid}");
-    }
-
-    // 登入完成後，才開始監聽資料
-    if (user != null) {
-      _listenToFirebaseData(); // 把 UID 傳進去
-      _checkUserDataStatus();
     }
   }
 
@@ -370,7 +452,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     return totals;
   }
 
-  // --- 關鍵函式：前往設定頁面並在返回時更新狀態 ---
+  // --- 前往設定頁面並在返回時更新狀態 ---
   Future<void> _navigateToSettings() async {
     // 等待設定頁面關閉
     await Navigator.push(
@@ -798,7 +880,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   // 營養進度條 (輔助)
   Widget _buildNutrientBar(String label, Color color, double percentage) {
     final String percentageString = '${(percentage * 100).toStringAsFixed(0)}%';
-
+    // 如果進度超過100%，文字顏色變紅
+    final Color textColor = percentage >= 1.0 ? Colors.red : Colors.black54;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -828,10 +911,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             const SizedBox(width: 12), // 進度條和文字的間距
             Text(
               percentageString,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: Colors.black54,
+                color: textColor,
               ),
             ),
           ],
@@ -1051,8 +1134,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Container(
-            width: 400, // 限制寬度，讓它變成「縱向」
-            padding: const EdgeInsets.all(24.0),
+            width: 400,
             // Dialog的內容在FoodEditDialogContent這個Widget裡
             child: FoodEditDialogContent(
               item: item,
@@ -1169,7 +1251,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -1181,7 +1263,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
             style: const TextStyle(
               color: Colors.black87,
-              fontSize: 16, // 字體大小
+              fontSize: 13, // 字體大小
+              fontWeight: FontWeight.bold,
             ),
 
             decoration: InputDecoration(
@@ -1225,7 +1308,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                 icon: Icon(
                   Icons.remove_circle_outline,
                   color: Colors.grey[400],
-                  size: 20,
+                  size: 16,
                 ),
                 onPressed: () {
                   // 點擊時，在視窗中暫時刪除食材(目前還不會真正刪除Firebase中的資料)
@@ -1243,11 +1326,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             ],
           ),
           const SizedBox(height: 4),
-
           // 第二行：克數與熱量
           Text(
             '${ingredient.grams} g • ${ingredient.calories} kcal',
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
           ),
           const SizedBox(height: 8),
 
@@ -1341,6 +1423,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     }
     // SingleChildScrollView可確保鍵盤彈出時內容不會溢位
     return SingleChildScrollView(
+      padding: const EdgeInsets.all(24.0),
       child: Column(
         mainAxisSize: MainAxisSize.min, // 讓Column符合內容高度
         crossAxisAlignment: CrossAxisAlignment.start,

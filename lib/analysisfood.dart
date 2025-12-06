@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb
+import 'package:flutter/foundation.dart'; // For kIsWeb, compute
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -110,6 +110,12 @@ class _DashboardPageState extends State<DashboardPage> {
   // 定位 Key 與 滾動控制器
   final GlobalKey _resultKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
+
+  // 🟢 優化 1：新增這個函式，在背景執行緒將圖片轉為 Base64
+  // 這能避免主畫面卡死導致 System UI 無回應
+  static Future<String> _encodeImageInBackground(Uint8List bytes) async {
+    return compute((Uint8List b) => base64Encode(b), bytes);
+  }
 
   @override
   void initState() {
@@ -218,11 +224,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context, 0),
-                    // 🟢 修改：恢復您原本的樣式 (灰色、有邊框)
                     style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
                       foregroundColor: Colors.grey,
                       side: const BorderSide(color: Colors.grey),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('取消'),
                   ),
@@ -253,9 +258,10 @@ class _DashboardPageState extends State<DashboardPage> {
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
+        // 🟢 優化 2：物理壓縮 (拍照時就縮小，大幅減少記憶體佔用)
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 70,
       );
       if (image != null) await _showImagePreview(image);
     } catch (e) {
@@ -268,9 +274,10 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
+        // 🟢 優化 2：物理壓縮 (選圖時就縮小)
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 70,
       );
       if (image != null) _handleSelectedImage(image);
     } catch (e) {
@@ -283,9 +290,10 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1200,
-        maxHeight: 1200,
-        imageQuality: 85,
+        // 🟢 優化 2：物理壓縮 (選檔時就縮小)
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 70,
       );
       if (image != null) _handleSelectedImage(image);
     } catch (e) {
@@ -324,10 +332,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context, false),
-                    // 🟢 修改：恢復原本的灰色樣式
                     style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 50),
                       foregroundColor: Colors.grey,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('重拍'),
                   ),
@@ -336,7 +343,6 @@ class _DashboardPageState extends State<DashboardPage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context, true),
-                    // 主按鈕仍使用主題色，但保留 minimumSize 以匹配佈局
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 50),
                     ),
@@ -518,7 +524,7 @@ class _DashboardPageState extends State<DashboardPage> {
             }
           }
         } catch (e) {
-          if (e is String) throw e;
+          if (e is String) rethrow;
           print("JSON 解析失敗: $cleanJson");
           throw "AI 回傳格式有誤，請重試";
         }
@@ -539,14 +545,22 @@ class _DashboardPageState extends State<DashboardPage> {
       _showSnackBar('錯誤：系統偵測到尚未登入');
       return;
     }
+    // 雙重檢查
     if (_analysisResult == null || _imageBytes == null) return;
 
     setState(() => _isAnalyzing = true);
 
     try {
-      String base64Image = base64Encode(_imageBytes!);
-      if (_imageBytes!.length > 800000) {
-        base64Image = base64Encode(_imageBytes!.sublist(0, 800000));
+      //  優化 3：使用 compute 在背景轉碼，避免主執行緒卡死 (ANR)
+      String base64Image = await _encodeImageInBackground(_imageBytes!);
+
+      //  優化 4：移除原本錯誤的 sublist 切割邏輯
+      // 因為我們已經在 ImagePicker 做過物理壓縮 (maxWidth:800)，
+      // 這裡直接存，保留圖片完整性。
+
+      // 安全檢查：雖然壓縮過，但如果還是太大，Firestore 會報錯，這裡先做個預防
+      if (base64Image.length > 1048576) {
+        throw "圖片壓縮後仍然過大 (超過1MB)，請嘗試重拍更簡單的畫面";
       }
 
       final recordRef = FirebaseFirestore.instance
@@ -564,6 +578,9 @@ class _DashboardPageState extends State<DashboardPage> {
         'created_at': FieldValue.serverTimestamp(),
         'analyzed_date_string': _formatDateTime(_analysisResult!.analyzedTime),
         'total_calories': _analysisResult!.totalCalories,
+        'total_protein': _analysisResult!.totalProtein,
+        'total_carbs': _analysisResult!.totalCarbs,
+        'total_fat': _analysisResult!.totalFat,
       };
 
       batch.set(recordRef, recordData);
@@ -580,17 +597,17 @@ class _DashboardPageState extends State<DashboardPage> {
       await batch.commit();
 
       if (mounted) {
-        // 🟢 修改：儲存成功後使用 AlertDialog (系統樣式)
         showDialog(
           context: context,
+          barrierDismissible: false, // 強制使用者點擊按鈕才能關閉
           builder: (_) => AlertDialog(
             title: const Text('儲存成功'),
-            content: const Text('分析結果已成功儲存至紀錄。'),
+            content: const Text('分析結果已儲存。'),
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, '/');
+                  Navigator.pop(context); // 關閉 dialog
+                  Navigator.of(context).pop(); // 直接退出 dashboard 頁面，回到首頁
                 },
                 child: const Text('OK'),
               ),
@@ -599,7 +616,12 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       }
     } catch (e) {
-      _showSnackBar('儲存失敗: $e');
+      print("儲存錯誤: $e");
+      if (e.toString().contains("larger than")) {
+        _showSnackBar('圖片過大，無法儲存');
+      } else {
+        _showSnackBar('儲存失敗: $e');
+      }
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }
@@ -612,7 +634,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _showSnackBar(String message, {bool isSuccess = false}) {
     if (!mounted) return;
-    // 🟢 修改：使用系統預設 SnackBar (移除 backgroundColor)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -629,10 +650,11 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // App Bar 使用系統樣式
+      // 🟢 修改：App Bar 改為預設樣式 (跟 auth.dart 一致)
       appBar: AppBar(
         title: null,
         centerTitle: false,
+        // 移除 backgroundColor, iconTheme, elevation
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -643,9 +665,6 @@ class _DashboardPageState extends State<DashboardPage> {
             }
           },
         ),
-        actions: [
-          IconButton(onPressed: () {}, icon: const Icon(Icons.more_vert)),
-        ],
       ),
 
       body: LayoutBuilder(
@@ -885,13 +904,12 @@ class _DashboardPageState extends State<DashboardPage> {
               Expanded(
                 child: TextButton(
                   onPressed: _resetAll,
+                  // 🟢 保留灰色取消按鈕，但統一高度
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
+                    foregroundColor: Colors.grey,
                   ),
-                  child: const Text(
-                    '重選 / 取消',
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                  child: const Text('重選 / 取消'),
                 ),
               ),
             if (_imageBytes != null) const SizedBox(width: 12),
@@ -905,7 +923,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           ? _analyzeImage
                           : _saveToFirestore)
                     : null,
-                // 主按鈕保持主題樣式 (Teal)，與 Auth 一致
+                // 🟢 統一按鈕高度 50，顏色跟隨 AppTheme
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
@@ -1003,7 +1021,7 @@ class _DashboardPageState extends State<DashboardPage> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F9F9),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Color(0xFFA5C5C2).withOpacity(0.1)),
+                border: Border.all(color: Colors.teal.withOpacity(0.1)),
               ),
               child: Row(
                 children: [
@@ -1031,19 +1049,19 @@ class _DashboardPageState extends State<DashboardPage> {
                           children: [
                             _buildMiniNutrient(
                               Icons.circle,
-                              Color.fromARGB(255, 117, 181, 233),
+                              Colors.blue,
                               ingredient.protein,
                               isMobile,
                             ),
                             _buildMiniNutrient(
                               Icons.circle,
-                              Color.fromARGB(255, 132, 202, 206),
+                              Colors.green,
                               ingredient.carbs,
                               isMobile,
                             ),
                             _buildMiniNutrient(
                               Icons.circle,
-                              Color.fromARGB(255, 245, 190, 118),
+                              Colors.orange,
                               ingredient.fat,
                               isMobile,
                             ),
@@ -1063,8 +1081,8 @@ class _DashboardPageState extends State<DashboardPage> {
                           ? Icons.remove_circle_outline
                           : Icons.add_circle_outline,
                       color: ingredient.isSelected
-                          ? Color(0xFFE96A60)
-                          : Color(0xFFA5C5C2),
+                          ? Colors.red[300]
+                          : Colors.teal,
                       size: isMobile ? 24 : 28,
                     ),
                   ),
@@ -1142,7 +1160,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '蛋白質',
             '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-            Color.fromARGB(255, 117, 181, 233),
+            Colors.blue,
             isMobile,
           ),
         ),
@@ -1151,7 +1169,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '碳水化合物',
             '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-            Color.fromARGB(255, 132, 202, 206),
+            Colors.green,
             isMobile,
           ),
         ),
@@ -1160,7 +1178,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '脂肪',
             '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-            Color.fromARGB(255, 245, 190, 118),
+            Colors.orange,
             isMobile,
           ),
         ),
@@ -1175,19 +1193,19 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         _buildLabel(
           Icons.restaurant_menu,
-          Color.fromARGB(255, 117, 181, 233),
+          Colors.blue[300]!,
           '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.eco,
-          Color.fromARGB(255, 132, 202, 206),
+          Colors.green[300]!,
           '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.water_drop,
-          Color.fromARGB(255, 245, 190, 118),
+          Colors.orange[300]!,
           '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
           isMobile,
         ),

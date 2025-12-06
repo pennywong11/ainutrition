@@ -9,14 +9,12 @@ class AppTheme {
 
   static ThemeData theme = ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: primaryDeep,
-    ).copyWith(
+    colorScheme: ColorScheme.fromSeed(seedColor: primaryDeep).copyWith(
       primary: primaryDeep,
       surface: Colors.white,
       background: primaryLight,
     ),
-  scaffoldBackgroundColor: primaryLight,
+    scaffoldBackgroundColor: primaryLight,
 
     appBarTheme: const AppBarTheme(
       backgroundColor: primaryDeep,

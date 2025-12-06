@@ -89,9 +89,8 @@ class _AdminPageState extends State<AdminPage> {
       final email = (u["email"] ?? "").toLowerCase();
       final uid = (u["uid"] ?? "").toLowerCase();
 
-      bool matchKeyword = keyword.isEmpty ||
-          email.contains(keyword) ||
-          uid.contains(keyword);
+      bool matchKeyword =
+          keyword.isEmpty || email.contains(keyword) || uid.contains(keyword);
 
       // 篩選 admin、匿名
       bool matchAdmin = !filterAdmin || (u["admin"] == true);
@@ -114,22 +113,19 @@ class _AdminPageState extends State<AdminPage> {
         "Authorization": "Bearer $token",
         "Content-Type": "application/json",
       },
-      body: jsonEncode({
-        "email": email,
-        "password": password,
-      }),
+      body: jsonEncode({"email": email, "password": password}),
     );
 
     if (resp.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("成功新增使用者${email}")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("成功新增使用者${email}")));
 
       _getUsers(); // 🔵 自動刷新列表
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("新增失敗：${resp.body}")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("新增失敗：${resp.body}")));
       print("Create user failed: ${resp.statusCode} - ${resp.body}");
     }
   }
@@ -239,15 +235,15 @@ class _AdminPageState extends State<AdminPage> {
     );
 
     if (resp.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("已刪除使用者：$uid")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("已刪除使用者：$uid")));
       _getUsers();
       setState(() => selectedUser = null);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("刪除失敗")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("刪除失敗")));
     }
   }
 
@@ -295,7 +291,7 @@ class _AdminPageState extends State<AdminPage> {
               : null,
 
           body: isSmall
-              ? _buildSmallScreen(cs)   // 🔵 小螢幕排版
+              ? _buildSmallScreen(cs) // 🔵 小螢幕排版
               : _buildLargeScreen(cs), // 🔵 大螢幕排版
         );
       },
@@ -321,12 +317,17 @@ class _AdminPageState extends State<AdminPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("管理員", style: TextStyle(fontWeight: FontWeight.w600)),
-                Text(adminEmail ?? "unknown",
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Text(
+                  "管理員",
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  adminEmail ?? "unknown",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -386,7 +387,11 @@ class _AdminPageState extends State<AdminPage> {
               onPressed: () async {
                 await FirebaseAuth.instance.signOut();
                 if (mounted) {
-                  Navigator.pushNamedAndRemoveUntil(context, "/login", (_) => false);
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    "/login",
+                    (_) => false,
+                  );
                 }
               },
               icon: const Icon(Icons.logout),
@@ -417,7 +422,8 @@ class _AdminPageState extends State<AdminPage> {
                   hintText: "搜尋 Email / UID",
                   prefixIcon: const Icon(Icons.search),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -515,9 +521,9 @@ class _AdminPageState extends State<AdminPage> {
     );
 
     if (resp.statusCode != 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("取得使用者資料失敗")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("取得使用者資料失敗")));
       return;
     }
 
@@ -526,7 +532,6 @@ class _AdminPageState extends State<AdminPage> {
     setState(() {
       selectedUser = user;
     });
-
   }
 
   Widget _buildUserDetailPanel(ColorScheme cs) {
@@ -546,7 +551,10 @@ class _AdminPageState extends State<AdminPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("詳細資訊", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(
+            "詳細資訊",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
 
           Text("Email：${u["email"] ?? "null"}"),
@@ -554,18 +562,10 @@ class _AdminPageState extends State<AdminPage> {
           Text("Admin：${u["admin"]}"),
           Text("Email 驗證：${u["email_verified"]}"),
           Text(
-            "註冊時間：${meta["creation_time"] != null
-                ? DateFormat('yyyy/MM/dd').format(
-                    DateTime.fromMillisecondsSinceEpoch(meta["creation_time"])
-                  )
-                : "未知"}"
+            "註冊時間：${meta["creation_time"] != null ? DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(meta["creation_time"])) : "未知"}",
           ),
           Text(
-            "最後登入：${meta["last_sign_in_time"] != null
-                ? DateFormat('yyyy/MM/dd').format(
-                    DateTime.fromMillisecondsSinceEpoch(meta["last_sign_in_time"])
-                  )
-                : "未知"}"
+            "最後登入：${meta["last_sign_in_time"] != null ? DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(meta["last_sign_in_time"])) : "未知"}",
           ),
 
           const Spacer(),
@@ -579,12 +579,12 @@ class _AdminPageState extends State<AdminPage> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => deleteUser(u["uid"]),
-          )
+          ),
         ],
       ),
     );
   }
-  
+
   // 左側工具列樣式
   Widget _toolButton({
     required IconData icon,
@@ -608,10 +608,7 @@ class _AdminPageState extends State<AdminPage> {
             const SizedBox(width: 12),
             Text(
               label,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const Spacer(),
             Icon(Icons.chevron_right),
@@ -637,10 +634,7 @@ class _AdminPageState extends State<AdminPage> {
           Expanded(child: _buildUserList(cs)),
           const SizedBox(height: 12),
 
-          Container(
-            height: 260,
-            child: _buildUserDetailPanel(cs),
-          ),
+          Container(height: 260, child: _buildUserDetailPanel(cs)),
         ],
       ),
     );
@@ -672,7 +666,7 @@ class _AdminPageState extends State<AdminPage> {
                       Expanded(flex: 3, child: _buildUserDetailPanel(cs)),
                     ],
                   ),
-                )
+                ),
               ],
             ),
           ),
@@ -680,5 +674,4 @@ class _AdminPageState extends State<AdminPage> {
       ],
     );
   }
-
 }
