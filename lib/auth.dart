@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'package:http/http.dart' as http;
 
+
 //final user = FirebaseAuth.instance.currentUser;
 /*
 Future<void> main() async {
@@ -89,9 +90,9 @@ class _LoginPageState extends State<LoginPage> {
     final password = passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('請輸入帳號與密碼')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請輸入帳號與密碼')),
+      );
       return;
     }
 
@@ -118,11 +119,7 @@ class _LoginPageState extends State<LoginPage> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context); // 關閉 dialog
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/',
-                  (route) => false,
-                );
+                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
               },
               child: const Text('OK'),
             ),
@@ -136,11 +133,14 @@ class _LoginPageState extends State<LoginPage> {
         Uri.parse("http://127.0.0.1:8000/admin"),
         headers: {"Authorization": "Bearer $token"},
       );*/
-      FirebaseAuth.instance.authStateChanges().listen((User? user) {
-        if (user != null) {
-          print(user.uid);
-        }
-      });
+      FirebaseAuth.instance
+        .authStateChanges()
+        .listen((User? user) {
+          if (user != null) {
+            print(user.uid);
+          }
+        });
+        
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
       //ScaffoldMessenger.of(context)
@@ -171,9 +171,8 @@ class _LoginPageState extends State<LoginPage> {
           msg = '登入失敗：${e.message}';
           break;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('登入失敗：$msg')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('登入失敗：$msg')));
       print('登入失敗：${e.code} - ${e.message}');
     }
   }
@@ -228,9 +227,7 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const ResetPasswordPage(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const ResetPasswordPage()),
                     );
                   },
                   child: const Text("忘記密碼？"),
@@ -295,16 +292,16 @@ class _RegisterPageState extends State<RegisterPage> {
     final confirm = confirmPasswordController.text.trim();
 
     if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('請輸入所有欄位')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('請輸入所有欄位')),
+      );
       return;
     }
 
     if (password != confirm) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('兩次密碼不一致')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('兩次密碼不一致')),
+      );
       return;
     }
 
@@ -323,7 +320,8 @@ class _RegisterPageState extends State<RegisterPage> {
             ?.linkWithCredential(credential);
 
         await userCredential?.user!.sendEmailVerification();
-      } else {
+      } 
+      else {
         // 普通註冊
         final userCredential = await FirebaseAuth.instance
             .createUserWithEmailAndPassword(email: email, password: password);
@@ -337,9 +335,9 @@ class _RegisterPageState extends State<RegisterPage> {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('驗證信已寄出，請前往信箱確認')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('驗證信已寄出，請前往信箱確認')),
+      );
 
       showDialog(
         context: context,
@@ -381,9 +379,8 @@ class _RegisterPageState extends State<RegisterPage> {
           msg = '註冊失敗：${e.message}';
           break;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
+      ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
       print('註冊失敗：${e.code} - ${e.message}');
     }
   }
@@ -409,6 +406,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     labelText: '電子郵件',
                     border: OutlineInputBorder(),
                   ),
+                  textInputAction: TextInputAction.next, // 按 enter 跳到密碼欄
                 ),
                 const SizedBox(height: 15),
                 TextField(
@@ -418,6 +416,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     labelText: '密碼',
                     border: OutlineInputBorder(),
                   ),
+                  textInputAction: TextInputAction.next, // 按 enter 跳到密碼欄
                 ),
                 const SizedBox(height: 15),
                 TextField(
@@ -427,6 +426,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     labelText: '確認密碼',
                     border: OutlineInputBorder(),
                   ),
+                  onSubmitted: (_) => register(), //  Enter 直接註冊
                 ),
                 const SizedBox(height: 30),
                 isLoading
@@ -477,9 +477,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     final email = emailController.text.trim();
 
     if (email.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("請輸入電子郵件")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("請輸入電子郵件")),
+      );
       return;
     }
 
@@ -504,9 +504,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
       );
     } on FirebaseAuthException catch (e) {
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("寄送失敗：${e.message}")));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("寄送失敗：${e.message}")));
     }
   }
 
@@ -530,6 +529,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 labelText: "電子郵件",
                 border: OutlineInputBorder(),
               ),
+              keyboardType: TextInputType.emailAddress,
+              onSubmitted: (_) => resetPassword(),
             ),
             const SizedBox(height: 30),
             isLoading
@@ -540,7 +541,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       minimumSize: const Size(double.infinity, 50),
                     ),
                     child: const Text("寄送重設密碼信"),
-                  ),
+                  )
           ],
         ),
       ),
