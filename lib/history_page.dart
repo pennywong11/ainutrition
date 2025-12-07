@@ -58,6 +58,8 @@ class Ingredient {
   final double protein; // 蛋白質
   final double fat; // 脂肪
 
+  bool isDeleted = false;
+
   Ingredient({
     this.id,
     required this.name,
@@ -473,7 +475,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       appBar: AppBar(
         // ！！！關鍵修正：隱藏預設的返回鍵 (防止首頁出現上一頁箭頭)
         automaticallyImplyLeading: false,
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+        // backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
           IconButton(
@@ -1193,6 +1195,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
     // 2. 迭代 _ingredients List 進行加總
     for (final ingredient in _ingredients) {
+      if (ingredient.isDeleted) continue;
       totalGrams += ingredient.grams;
       totalCalories += ingredient.calories;
       totalProtein += ingredient.protein;
@@ -1285,79 +1288,109 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
   }
 
   Widget _buildIngredientRow(Ingredient ingredient, int index) {
+    // 根據是否刪除，決定顏色與透明度
+    final bool isDeleted = ingredient.isDeleted;
+    final Color textColor = isDeleted ? Colors.grey[400]! : Colors.black87;
+    final Color subTextColor = isDeleted
+        ? Colors.grey[300]!
+        : Colors.grey[600]!;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 第一行：食材名稱
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                ingredient.name,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              IconButton(
-                // 視覺調整(讓按鈕更貼齊)
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                icon: Icon(
-                  Icons.remove_circle_outline,
-                  color: Colors.grey[400],
-                  size: 16,
-                ),
-                onPressed: () {
-                  // 點擊時，在視窗中暫時刪除食材(目前還不會真正刪除Firebase中的資料)
-                  setState(() {
-                    // 刪除前，如果它有 ID，就加入「待刪除清單」
-                    if (ingredient.id != null) {
-                      _ingredientsToDelete.add(ingredient.id!);
-                    }
-                    _ingredients.removeAt(index);
-                    // 刪除後會立刻重新計算總合
-                    _calculateTotals();
-                  });
-                },
-              ),
-            ],
+      child: Container(
+        // 如果刪除：背景變全白(或很淡的灰)；沒刪除：維持原本的淡底色
+        decoration: BoxDecoration(
+          color: isDeleted ? Colors.grey[200] : const Color(0xFFF5F9F9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDeleted ? Colors.grey[200]! : Colors.transparent,
           ),
-          const SizedBox(height: 4),
-          // 第二行：克數與熱量
-          Text(
-            '${ingredient.grams} g • ${ingredient.calories} kcal',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 8),
+        ),
+        padding: const EdgeInsets.all(12), // 稍微加點內距比較好看
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 第一行：食材名稱
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  ingredient.name,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: textColor, // 套用顏色
+                  ),
+                ),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  // 切換圖示：刪除狀態顯示 + (加回來)，正常狀態顯示 - (刪除)
+                  icon: Icon(
+                    isDeleted
+                        ? Icons.add_circle_outline
+                        : Icons.remove_circle_outline,
+                    color: isDeleted
+                        ? Colors.teal
+                        : Colors.red[300], // 刪除時變綠色(加回)，平時紅色
+                    size: 24, // 稍微加大一點點比較好按
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      // 1. 切換刪除狀態
+                      ingredient.isDeleted = !ingredient.isDeleted;
 
-          // 第三行：三個營養素(分別有各自代表的符號)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              _buildMacroInfo(
-                Icons.restaurant_menu,
-                Color.fromARGB(255, 117, 181, 233),
-                ingredient.protein,
-              ), // 蛋白質
-              const SizedBox(width: 16),
-              _buildMacroInfo(
-                Icons.eco,
-                Color.fromARGB(255, 132, 197, 187),
-                ingredient.carbs,
-              ), // 碳水化合物
-              const SizedBox(width: 16),
-              _buildMacroInfo(
-                Icons.water_drop,
-                Color.fromARGB(255, 245, 190, 118),
-                ingredient.fat,
-              ), // 脂肪
-            ],
-          ),
-          Divider(height: 16, color: Colors.grey[300]), // 加分隔線
-        ],
+                      // 2. 同步更新「待刪除清單 (_ingredientsToDelete)」
+                      if (ingredient.id != null) {
+                        if (ingredient.isDeleted) {
+                          // 如果現在變成「已刪除」，加入待刪除清單
+                          _ingredientsToDelete.add(ingredient.id!);
+                        } else {
+                          // 如果現在變成「恢復」，從待刪除清單移除
+                          _ingredientsToDelete.remove(ingredient.id!);
+                        }
+                      }
+
+                      // 3. 重新計算總數 (_calculateTotals 會自動過濾掉 isDeleted 的項目)
+                      _calculateTotals();
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+
+            // 第二行：克數與熱量
+            Text(
+              '${ingredient.grams} g • ${ingredient.calories} kcal',
+              style: TextStyle(fontSize: 14, color: subTextColor),
+            ),
+            const SizedBox(height: 8),
+
+            // 第三行：三個營養素 (如果刪除就讓它變得很淡)
+            Opacity(
+              opacity: isDeleted ? 0.3 : 1.0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  _buildMacroInfo(Icons.eco, Colors.green, ingredient.carbs),
+                  const SizedBox(width: 16),
+                  _buildMacroInfo(
+                    Icons.restaurant_menu,
+                    Colors.blue,
+                    ingredient.protein,
+                  ),
+                  const SizedBox(width: 16),
+                  _buildMacroInfo(
+                    Icons.water_drop,
+                    Colors.orange,
+                    ingredient.fat,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
