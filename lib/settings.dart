@@ -36,9 +36,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _setupUserDoc() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
-      userDoc = FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid);
+      userDoc = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
       await _loadUserData();
     }
   }
@@ -55,14 +53,10 @@ class _SettingsPageState extends State<SettingsPage> {
           age ??= data['age'] != null ? (data['age'] as num).toInt() : null;
           if (age != null) ageController.text = age.toString();
 
-          height ??= data['height'] != null
-              ? (data['height'] as num).toDouble()
-              : null;
+          height ??= data['height'] != null ? (data['height'] as num).toDouble() : null;
           if (height != null) heightController.text = height.toString();
 
-          weight ??= data['weight'] != null
-              ? (data['weight'] as num).toDouble()
-              : null;
+          weight ??= data['weight'] != null ? (data['weight'] as num).toDouble() : null;
           if (weight != null) weightController.text = weight.toString();
         });
       }
@@ -84,9 +78,9 @@ class _SettingsPageState extends State<SettingsPage> {
         weight = null;
       });
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已登出')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已登出')),
+      );
 
       showDialog(
         context: context,
@@ -100,10 +94,11 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
       );
+
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('登出失敗：$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('登出失敗：$e')),
+      );
     }
   }
 
@@ -140,39 +135,35 @@ class _SettingsPageState extends State<SettingsPage> {
   void _sendPasswordResetEmail() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser?.email == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("無法取得使用者 Email")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("無法取得使用者 Email")),
+      );
       return;
     }
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: currentUser!.email!,
-      );
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: currentUser!.email!);
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("已寄出密碼重設信至：${currentUser.email}")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("已寄出密碼重設信至：${currentUser.email}")),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("寄信失敗，請稍後再試")),
+      );
     }
   }
 
   Future<void> _saveUserData() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('尚未登入，無法儲存資料')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('尚未登入，無法儲存資料')),
+      );
       return;
     }
 
-    userDoc ??= FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUser.uid);
+    userDoc ??= FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
 
     try {
       await userDoc!.set({
@@ -182,13 +173,13 @@ class _SettingsPageState extends State<SettingsPage> {
         'weight': weight,
       }, SetOptions(merge: true));
 
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('已儲存健康資料')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已儲存健康資料')),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('儲存失敗: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('儲存失敗: $e')),
+      );
     }
   }
 
@@ -224,17 +215,11 @@ class _SettingsPageState extends State<SettingsPage> {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: cs.surface,
+                            color: cs.background,
                             shape: BoxShape.circle,
-                            border: Border.all(
-                              color: cs.primary.withOpacity(0.2),
-                            ),
+                            border: Border.all(color: cs.primary.withOpacity(0.2)),
                           ),
-                          child: Icon(
-                            Icons.person,
-                            size: 38,
-                            color: cs.primary,
-                          ),
+                          child: Icon(Icons.person, size: 38, color: cs.primary),
                         ),
                         const SizedBox(width: 12),
 
@@ -243,11 +228,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isLoggedIn ? user.email! : "未登入使用者",
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                isLoggedIn ? user!.email! : "未登入使用者",
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(height: 6),
                               if (isLoggedIn)
@@ -332,9 +314,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(hintText: '請輸入年齡'),
-                      onChanged: (v) {
-                        age = int.tryParse(v);
-                      },
+                      textInputAction: TextInputAction.next, 
+                      onChanged: (v) {age = int.tryParse(v);},
                     ),
 
                     // 身高 (cm)
@@ -342,16 +323,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     _sectionLabel('身高 (cm)'),
                     TextField(
                       controller: heightController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r"[0-9.]")),
-                      ],
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[0-9.]"))],
                       decoration: InputDecoration(hintText: '請輸入身高'),
-                      onChanged: (v) {
-                        height = double.tryParse(v);
-                      },
+                      textInputAction: TextInputAction.next, 
+                      onChanged: (v) {height = double.tryParse(v);},
                     ),
 
                     const SizedBox(height: 16),
@@ -360,16 +336,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     _sectionLabel('體重 (kg)'),
                     TextField(
                       controller: weightController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r"[0-9.]")),
-                      ],
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[0-9.]"))],
                       decoration: const InputDecoration(hintText: '請輸入體重'),
-                      onChanged: (v) {
-                        weight = double.tryParse(v);
-                      },
+                      onSubmitted: (_) => _saveUserData(),
+                      onChanged: (v) {weight = double.tryParse(v);},
                     ),
                   ],
                 ),
@@ -431,12 +402,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _sectionTitle(String text) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Text(
-      text,
-      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-    ),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Text(text,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+      );
 
   Widget _infoRow(String title, String value) {
     final cs = Theme.of(context).colorScheme;
@@ -449,12 +418,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
+          Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w600))),
           Text(value, style: TextStyle(color: cs.primary)),
         ],
       ),

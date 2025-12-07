@@ -409,6 +409,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     labelText: '電子郵件',
                     border: OutlineInputBorder(),
                   ),
+                  textInputAction: TextInputAction.next, // 按 enter 跳到密碼欄
                 ),
                 const SizedBox(height: 15),
                 TextField(
@@ -418,6 +419,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     labelText: '密碼',
                     border: OutlineInputBorder(),
                   ),
+                  textInputAction: TextInputAction.next, // 按 enter 跳到密碼欄
                 ),
                 const SizedBox(height: 15),
                 TextField(
@@ -427,6 +429,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     labelText: '確認密碼',
                     border: OutlineInputBorder(),
                   ),
+                  onSubmitted: (_) => register(), //  Enter 直接註冊
                 ),
                 const SizedBox(height: 30),
                 isLoading
@@ -530,6 +533,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                 labelText: "電子郵件",
                 border: OutlineInputBorder(),
               ),
+              keyboardType: TextInputType.emailAddress,
+              onSubmitted: (_) => resetPassword(),
             ),
             const SizedBox(height: 30),
             isLoading
