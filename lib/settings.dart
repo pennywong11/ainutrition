@@ -224,7 +224,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: cs.surface,
+                            color: cs.background,
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: cs.primary.withOpacity(0.2),
@@ -243,7 +243,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isLoggedIn ? user.email! : "未登入使用者",
+                                isLoggedIn ? user!.email! : "未登入使用者",
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -332,6 +332,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: const InputDecoration(hintText: '請輸入年齡'),
+                      textInputAction: TextInputAction.next,
                       onChanged: (v) {
                         age = int.tryParse(v);
                       },
@@ -349,6 +350,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         FilteringTextInputFormatter.allow(RegExp(r"[0-9.]")),
                       ],
                       decoration: InputDecoration(hintText: '請輸入身高'),
+                      textInputAction: TextInputAction.next,
                       onChanged: (v) {
                         height = double.tryParse(v);
                       },
@@ -367,6 +369,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         FilteringTextInputFormatter.allow(RegExp(r"[0-9.]")),
                       ],
                       decoration: const InputDecoration(hintText: '請輸入體重'),
+                      onSubmitted: (_) => _saveUserData(),
                       onChanged: (v) {
                         weight = double.tryParse(v);
                       },
