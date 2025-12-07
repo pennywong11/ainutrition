@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb, compute
+import 'package:flutter/cupertino.dart'; // 🟢 新增：引入 iOS 風格元件庫
+import 'package:flutter/foundation.dart'; // For kIsWeb, compute, defaultTargetPlatform
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -163,82 +164,142 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() => _isApiKeyLoaded = true);
   }
 
-  // 3. 選擇圖片邏輯
+  // ---------------------------------------------------------------------------
+  // 3. 選擇圖片邏輯 (跨平台原生適配版)
+  // ---------------------------------------------------------------------------
   Future<void> _showImagePickerOptions() async {
-    if (defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.android) {
-      await _showMobileImagePicker();
+    // 🟢 判斷是否為 iOS 平台
+    final bool isIOS = defaultTargetPlatform == TargetPlatform.iOS;
+
+    if (isIOS) {
+      // 🍎 iOS 使用者：顯示 CupertinoActionSheet (如您截圖所示)
+      await _showCupertinoImagePicker();
     } else {
-      await _pickImageFromGallery();
+      // 🤖 Android/Web 使用者：顯示 Material BottomSheet (已解決溢出問題)
+      await _showMaterialImagePicker();
     }
   }
 
-  Future<void> _showMobileImagePicker() async {
+  // iOS 風格選單實作
+  Future<void> _showCupertinoImagePicker() async {
+    final result = await showCupertinoModalPopup<int>(
+      context: context,
+      builder: (BuildContext context) => CupertinoActionSheet(
+        title: const Text('選擇圖片方式'),
+        actions: <CupertinoActionSheetAction>[
+          CupertinoActionSheetAction(
+            child: const Text('拍照'),
+            onPressed: () => Navigator.pop(context, 1),
+          ),
+          CupertinoActionSheetAction(
+            child: const Text('照片圖庫'),
+            onPressed: () => Navigator.pop(context, 2),
+          ),
+          CupertinoActionSheetAction(
+            child: const Text('選擇檔案'),
+            onPressed: () => Navigator.pop(context, 3),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          child: const Text('取消'),
+          isDestructiveAction: true,
+          onPressed: () => Navigator.pop(context, 0),
+        ),
+      ),
+    );
+    _handlePickerResult(result);
+  }
+
+  // Android/Web 風格選單實作 (解決溢出問題版)
+  Future<void> _showMaterialImagePicker() async {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     final result = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true, // 允許高度自適應
       builder: (context) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-          ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
+        // 🟢 關鍵修正：SafeArea + SingleChildScrollView 防止橫向溢出
         child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  '選擇圖片方式',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12),
+                // 頂部小拉條
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ),
-              ListTile(
-                leading: Icon(Icons.camera_alt, color: primaryColor),
-                title: const Text('拍照'),
-                onTap: () => Navigator.pop(context, 1),
-              ),
-              ListTile(
-                leading: Icon(Icons.photo_library, color: primaryColor),
-                title: const Text('上傳照片'),
-                onTap: () => Navigator.pop(context, 2),
-              ),
-              ListTile(
-                leading: Icon(Icons.folder, color: primaryColor),
-                title: const Text('選擇檔案'),
-                onTap: () => Navigator.pop(context, 3),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context, 0),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                      foregroundColor: Colors.grey,
-                      side: const BorderSide(color: Colors.grey),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    '選擇圖片方式',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
                     ),
-                    child: const Text('取消'),
                   ),
                 ),
-              ),
-            ],
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: primaryColor.withOpacity(0.1),
+                    child: Icon(Icons.camera_alt, color: primaryColor),
+                  ),
+                  title: const Text('拍照'),
+                  onTap: () => Navigator.pop(context, 1),
+                ),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: primaryColor.withOpacity(0.1),
+                    child: Icon(Icons.photo_library, color: primaryColor),
+                  ),
+                  title: const Text('照片圖庫'),
+                  onTap: () => Navigator.pop(context, 2),
+                ),
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: primaryColor.withOpacity(0.1),
+                    child: Icon(Icons.folder, color: primaryColor),
+                  ),
+                  title: const Text('選擇檔案'),
+                  onTap: () => Navigator.pop(context, 3),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text(
+                    '取消',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color.fromARGB(255, 86, 86, 86),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(context, 0),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
       ),
     );
+    _handlePickerResult(result);
+  }
 
+  // 統一處理回傳結果
+  Future<void> _handlePickerResult(int? result) async {
+    if (result == null || result == 0) return;
     switch (result) {
       case 1:
         await _takePhotoWithCamera();
@@ -309,6 +370,7 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        scrollable: true, // 修正 2: 啟用 Dialog 內建捲動，防止橫向預覽圖溢出
         title: const Text(
           '確認照片',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -538,7 +600,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 6. 儲存到 Firestore
+  // 6. 儲存到 Firestore (優化版)
   Future<void> _saveToFirestore() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
@@ -548,13 +610,13 @@ class _DashboardPageState extends State<DashboardPage> {
     // 雙重檢查
     if (_analysisResult == null || _imageBytes == null) return;
 
-    setState(() => _isAnalyzing = true);
+    setState(() => _isAnalyzing = true); // 轉圈圈開始
 
     try {
-      //  優化 3：使用 compute 在背景轉碼，避免主執行緒卡死 (ANR)
+      // 🟢 優化 3：使用 compute 在背景轉碼，避免主執行緒卡死 (ANR)
       String base64Image = await _encodeImageInBackground(_imageBytes!);
 
-      //  優化 4：移除原本錯誤的 sublist 切割邏輯
+      // 🟢 優化 4：移除原本錯誤的 sublist 切割邏輯
       // 因為我們已經在 ImagePicker 做過物理壓縮 (maxWidth:800)，
       // 這裡直接存，保留圖片完整性。
 
@@ -574,7 +636,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final recordData = {
         'AI分析建議': _analysisResult!.aiSummary,
         '食物名': _analysisResult!.dishName,
-        '圖片_base64': base64Image,
+        '圖片_base64': base64Image, // 存入壓縮後的 Base64
         'created_at': FieldValue.serverTimestamp(),
         'analyzed_date_string': _formatDateTime(_analysisResult!.analyzedTime),
         'total_calories': _analysisResult!.totalCalories,
@@ -650,7 +712,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 🟢 修改：App Bar 改為預設樣式 (跟 auth.dart 一致)
+      // 修改：App Bar 改為預設樣式 (跟 auth.dart 一致)
       appBar: AppBar(
         title: null,
         centerTitle: false,
@@ -665,6 +727,7 @@ class _DashboardPageState extends State<DashboardPage> {
             }
           },
         ),
+        // 🟢 已移除 actions: [...]，右上角的三個點消失了
       ),
 
       body: LayoutBuilder(
@@ -904,7 +967,7 @@ class _DashboardPageState extends State<DashboardPage> {
               Expanded(
                 child: TextButton(
                   onPressed: _resetAll,
-                  // 🟢 保留灰色取消按鈕，但統一高度
+                  //  灰色取消按鈕，統一高度
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     foregroundColor: Colors.grey,
@@ -1021,7 +1084,9 @@ class _DashboardPageState extends State<DashboardPage> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F9F9),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.teal.withOpacity(0.1)),
+                border: Border.all(
+                  color: Color.fromARGB(255, 132, 202, 206).withOpacity(0.1),
+                ),
               ),
               child: Row(
                 children: [
@@ -1049,19 +1114,19 @@ class _DashboardPageState extends State<DashboardPage> {
                           children: [
                             _buildMiniNutrient(
                               Icons.circle,
-                              Colors.blue,
+                              Color.fromARGB(255, 117, 181, 233),
                               ingredient.protein,
                               isMobile,
                             ),
                             _buildMiniNutrient(
                               Icons.circle,
-                              Colors.green,
+                              Color.fromARGB(255, 132, 202, 206),
                               ingredient.carbs,
                               isMobile,
                             ),
                             _buildMiniNutrient(
                               Icons.circle,
-                              Colors.orange,
+                              Color.fromARGB(255, 245, 190, 118),
                               ingredient.fat,
                               isMobile,
                             ),
@@ -1082,7 +1147,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           : Icons.add_circle_outline,
                       color: ingredient.isSelected
                           ? Colors.red[300]
-                          : Colors.teal,
+                          : Color.fromARGB(255, 132, 202, 206),
                       size: isMobile ? 24 : 28,
                     ),
                   ),
@@ -1145,7 +1210,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildSummaryCard(
             '熱量 (kcal)',
             '${_analysisResult!.totalCalories.toStringAsFixed(1)} kcal',
-            Colors.redAccent,
+            Color(0xFFE96A60),
             isMobile,
           ),
         ),
@@ -1160,7 +1225,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '蛋白質',
             '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-            Colors.blue,
+            Color.fromARGB(255, 117, 181, 233),
             isMobile,
           ),
         ),
@@ -1169,7 +1234,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '碳水化合物',
             '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-            Colors.green,
+            Color.fromARGB(255, 132, 202, 206),
             isMobile,
           ),
         ),
@@ -1178,7 +1243,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '脂肪',
             '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-            Colors.orange,
+            Color.fromARGB(255, 245, 190, 118),
             isMobile,
           ),
         ),
@@ -1193,19 +1258,19 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         _buildLabel(
           Icons.restaurant_menu,
-          Colors.blue[300]!,
+          Color.fromARGB(255, 117, 181, 233),
           '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.eco,
-          Colors.green[300]!,
+          Color.fromARGB(255, 132, 202, 206),
           '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.water_drop,
-          Colors.orange[300]!,
+          Color.fromARGB(255, 245, 190, 118),
           '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
           isMobile,
         ),
@@ -1237,7 +1302,11 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.auto_awesome, color: Colors.amber, size: 18),
+          const Icon(
+            Icons.auto_awesome,
+            color: Color.fromARGB(255, 230, 182, 41),
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
