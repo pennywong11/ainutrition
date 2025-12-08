@@ -475,7 +475,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       appBar: AppBar(
         // ！！！關鍵修正：隱藏預設的返回鍵 (防止首頁出現上一頁箭頭)
         automaticallyImplyLeading: false,
-        // backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
           IconButton(
@@ -1373,17 +1373,21 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  _buildMacroInfo(Icons.eco, Colors.green, ingredient.carbs),
+                  _buildMacroInfo(
+                    Icons.eco,
+                    Color.fromARGB(255, 132, 202, 206),
+                    ingredient.carbs,
+                  ),
                   const SizedBox(width: 16),
                   _buildMacroInfo(
                     Icons.restaurant_menu,
-                    Colors.blue,
+                    Color.fromARGB(255, 117, 181, 233),
                     ingredient.protein,
                   ),
                   const SizedBox(width: 16),
                   _buildMacroInfo(
                     Icons.water_drop,
-                    Colors.orange,
+                    Color.fromARGB(255, 245, 190, 118),
                     ingredient.fat,
                   ),
                 ],
