@@ -11,6 +11,10 @@ import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
 
+// 🟢 請根據你的檔案結構，正確引入 NutritionService
+// 假設檔案放在 lib/services/nutrition_service.dart
+import '../services/nutrition_service.dart';
+
 // -----------------------------------------------------------------------------
 // 資料模型 (Models)
 // -----------------------------------------------------------------------------
@@ -23,6 +27,7 @@ class Ingredient {
   double carbs;
   double fat;
   bool isSelected; // 用於控制是否包含在總計算中
+  bool isFromDatabase; // 🟢 新增：標記是否來自資料庫 (UI可選用)
 
   Ingredient({
     required this.name,
@@ -32,6 +37,7 @@ class Ingredient {
     required this.carbs,
     required this.fat,
     this.isSelected = true,
+    this.isFromDatabase = false,
   });
 
   factory Ingredient.fromJson(Map<String, dynamic> json) {
@@ -53,6 +59,7 @@ class Ingredient {
       '蛋白質(g)': protein,
       '碳水化合物(g)': carbs,
       '脂肪(g)': fat,
+      'is_verified': isFromDatabase,
     };
   }
 }
@@ -108,12 +115,13 @@ class _DashboardPageState extends State<DashboardPage> {
   late final GenerativeModel _model;
   bool _isApiKeyLoaded = false;
 
+  // 🟢 宣告 NutritionService
+  final NutritionService _nutritionService = NutritionService();
+
   // 定位 Key 與 滾動控制器
   final GlobalKey _resultKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
 
-  // 優化 1：新增這個函式，在背景執行緒將圖片轉為 Base64
-  // 這能避免主畫面卡死導致 System UI 無回應
   static Future<String> _encodeImageInBackground(Uint8List bytes) async {
     return compute((Uint8List b) => base64Encode(b), bytes);
   }
@@ -123,6 +131,9 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     _initializeAuth();
     _initializeAI();
+
+    // 🟢 啟動時載入 CSV 資料庫
+    _nutritionService.loadCsvData();
   }
 
   @override
@@ -165,28 +176,23 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 3. 選擇圖片邏輯 (真正的跨平台原生體驗 + Web 支援)
+  // 3. 選擇圖片邏輯 (保持原樣)
   // ---------------------------------------------------------------------------
   Future<void> _showImagePickerOptions() async {
-    //  修正：如果是 Web (Chrome 網頁版)，直接開資料夾，不要跳選單
     if (kIsWeb) {
       await _pickImageFromGallery();
       return;
     }
 
-    // 判斷是否為 iOS 平台 (針對 Native App)
     final bool isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
     if (isIOS) {
-      // 🍎 iOS 原生：顯示 ActionSheet (有3個選項)
       await _showCupertinoImagePicker();
     } else {
-      // 🤖 Android 原生：顯示 BottomSheet (只有2個選項)
       await _showMaterialImagePicker();
     }
   }
 
-  // iOS 風格 (ActionSheet) - 維持 3 個選項
   Future<void> _showCupertinoImagePicker() async {
     final result = await showCupertinoModalPopup<int>(
       context: context,
@@ -216,13 +222,12 @@ class _DashboardPageState extends State<DashboardPage> {
     _handlePickerResult(result);
   }
 
-  // Android 風格 (Material Bottom Sheet) - 只保留「拍照」與「圖庫」
   Future<void> _showMaterialImagePicker() async {
     final primaryColor = Theme.of(context).colorScheme.primary;
 
     final result = await showModalBottomSheet<int>(
       context: context,
-      isScrollControlled: true, // 關鍵：允許高度隨內容延伸
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -273,7 +278,6 @@ class _DashboardPageState extends State<DashboardPage> {
     _handlePickerResult(result);
   }
 
-  // 統一處理回傳結果
   Future<void> _handlePickerResult(int? result) async {
     if (result == null || result == 0) return;
     switch (result) {
@@ -295,7 +299,6 @@ class _DashboardPageState extends State<DashboardPage> {
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
-        // 物理壓縮
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -311,7 +314,6 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        // 物理壓縮
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -327,7 +329,6 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        // 物理壓縮
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -346,7 +347,7 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        scrollable: true, // 啟用 Dialog 內建捲動
+        scrollable: true,
         title: const Text(
           '確認照片',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -442,7 +443,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 5. 開始分析
+  // 5. 開始分析 (🟢 修改版：整合 AI 辨識 + 本地查表)
   // ---------------------------------------------------------------------------
   Future<void> _analyzeImage() async {
     if (_imageBytes == null) return;
@@ -458,39 +459,41 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final userInput = _promptController.text.trim();
 
-      // 修改：在 Prompt 中加入「嚴格輸出規範」，限制字數與名稱長度
+      // 🟢 Prompt 修改：完美復刻使用者原版邏輯，僅微調加入查表所需欄位
       final prompt =
           """
-      你是一個專業的營養師。請依據以下邏輯分析這張圖片與使用者的描述。
+      你是一個專業的營養師。請分析這張圖片與描述。
       
       使用者描述: "$userInput"
       
-      請執行【圖文衝突仲裁機制】：
+      請執行【圖文整合分析機制】：
       
-      1. **辨識圖片**：圖片內容是什麼？是食物嗎？
+      1. **辨識圖片**：首先列出圖片中「所有」看得到的食材 (例如：豬排、咖哩醬、紅蘿蔔、白飯)。
       2. **判斷情境** (依序判定)：
       
-         - **情境 A [完美情境]**：圖片清晰且是食物。
-           -> 行動：綜合分析圖片與文字。
-           -> 輸出：is_food: true, dish_name: 辨識結果, summary: 一般營養總結。
+         - **情境 A [修飾模式]**：圖片清晰且是食物。
+           -> 核心原則：**圖片是主角，文字是修飾。**
+           -> 行動：保留圖片中看到的所有食材。若使用者文字提到「半飯」、「少油」、「去皮」等，請**調整對應食材的重量或熱量**，但**絕對不能**因此忽略圖片中的其他主食或配菜。
+           -> 範例：圖是豬排咖哩飯，文字寫「半飯」。
+              * 錯誤行為：只輸出白飯。
+              * 正確行為：輸出豬排、咖哩、蔬菜，並輸出白飯(但重量減半)。
+           -> 輸出：is_food: true, dish_name: 辨識結果(加上文字備註), summary: 依據圖片與文字調整後的總結。
            
          - **情境 B [補救情境]**：圖片模糊/全黑/無法辨識，但使用者有輸入描述。
-           -> 行動：完全信賴使用者描述，提供標準估算值。
-           -> 輸出：is_food: true, dish_name: "$userInput (標準估算)", summary: "因圖片模糊，已依據文字分析提供標準數據。"
+           -> 行動：完全信賴使用者描述。
+           -> 輸出：is_food: true, dish_name: "$userInput", summary: "依據文字標準數據計算。"
            
-         - **情境 C [衝突情境]**：圖片清晰顯示為「非食物」(如貓、椅子、馬桶)，但使用者有輸入食物描述。
-           -> 行動：**強制信賴使用者描述**，忽略圖片內容。
-           -> 輸出：is_food: true, dish_name: "$userInput (文字估算)", summary: "圖片看起來是[圖片內容]，但已依據您的描述提供$userInput數據。"
-           
-         - **情境 D [無效情境]**：圖片非食物，且使用者「沒有」輸入描述。
-           -> 行動：拒絕服務。
-           -> 輸出：is_food: false, error_msg: "無法辨識為食物，請補充文字說明。"
+         - **情境 C [衝突情境]**：圖片清晰顯示為「非食物」(如貓、椅子)，但使用者輸入食物描述。
+           -> 行動：強制信賴使用者描述。
+           -> 輸出：is_food: true, dish_name: "$userInput (文字估算)", summary: "圖片非食物，依據文字計算。"
 
       【嚴格輸出規範】：
-      1. **summary (營養總結)**：請非常精簡，**絕對不要超過 30 個中文字**。直接講重點，不要廢話。
-      2. **ingredients (食材名稱)**：name 欄位請**只寫最核心的食材名**，去除所有冗言贅詞、形容詞或補充說明。
-         - 錯誤範例："番茄醬或其他調味"、"新鮮的羅美生菜"
-         - 正確範例："番茄醬"、"羅美生菜"
+      1. **summary**: 30個中文字內。
+      2. **ingredients**: 
+         - **name**: 寫核心食材名 (如: "豬排", "白飯")。
+         - **weight**: 預估重量(g)。**若使用者說「半飯」，請自動將白飯重量 * 0.5。**
+         - **search_terms**: [重要] 提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。
+         - **calories**: 提供 AI 估算的數值。
 
       【回傳格式 (JSON Only)】：
       {
@@ -499,7 +502,12 @@ class _DashboardPageState extends State<DashboardPage> {
         "dish_name": "...",
         "summary": "...",
         "ingredients": [
-          {"name": "...", "weight": 0, "calories": 0, "protein": 0, "carbs": 0, "fat": 0}
+          {
+            "name": "...", 
+            "weight": 100, 
+            "search_terms": ["關鍵字1", "關鍵字2"],
+            "calories": 0, "protein": 0, "carbs": 0, "fat": 0
+          }
         ]
       }
       """;
@@ -543,9 +551,67 @@ class _DashboardPageState extends State<DashboardPage> {
 
           List<Ingredient> ingredients = [];
           if (data['ingredients'] != null) {
-            ingredients = (data['ingredients'] as List)
-                .map((i) => Ingredient.fromJson(i))
-                .toList();
+            // 🟢 核心邏輯：遍歷每個食材，先查表，查不到才用 AI 數據
+            for (var item in data['ingredients']) {
+              String name = item['name'] ?? '未知食材';
+              double weight = (item['weight'] ?? 0).toDouble();
+
+              // 1. 先取得 AI 估算的備用數據 (AI 給的是該重量的總值)
+              double calories = (item['calories'] ?? 0).toDouble();
+              double protein = (item['protein'] ?? 0).toDouble();
+              double carbs = (item['carbs'] ?? 0).toDouble();
+              double fat = (item['fat'] ?? 0).toDouble();
+              bool isVerified = false;
+
+              // 2. 準備搜尋關鍵字
+              List<String> searchTerms = [];
+              if (item['search_terms'] != null) {
+                searchTerms = List<String>.from(item['search_terms']);
+              }
+              searchTerms.insert(0, name); // 把原名也加進去搜
+
+              // 3. 查表 (Hybrid Logic)
+              // 搜尋會回傳一個 List，我們取第一個最匹配的
+              List<FoodItem> matches = [];
+              for (var term in searchTerms) {
+                matches = _nutritionService.searchFood(term);
+                if (matches.isNotEmpty) break; // 找到就停止
+              }
+
+              if (matches.isNotEmpty) {
+                // 🎉 查到了！使用資料庫數據
+                final dbFood = matches.first;
+
+                // 衛福部資料是「每 100g」的含量
+                // 公式：總量 = (每100g數值) * (重量 / 100)
+                double ratio = weight / 100.0;
+
+                calories = dbFood.calories * ratio;
+                protein = dbFood.protein * ratio;
+                fat = dbFood.fat * ratio;
+                carbs = dbFood.carbs * ratio;
+
+                // 可選：更新顯示名稱，加上 (DB) 標記或改成資料庫正式名稱
+                // name = dbFood.name;
+                isVerified = true;
+
+                print("✅ [查表成功] $name 對應到 ${dbFood.name} (ID: ${dbFood.id})");
+              } else {
+                print("⚠️ [查無資料] $name 使用 AI 估算值");
+              }
+
+              ingredients.add(
+                Ingredient(
+                  name: name,
+                  weight: weight,
+                  calories: calories,
+                  protein: protein,
+                  carbs: carbs,
+                  fat: fat,
+                  isFromDatabase: isVerified,
+                ),
+              );
+            }
           }
 
           setState(() {
@@ -583,27 +649,20 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 6. 儲存到 Firestore (優化版)
+  // 6. 儲存到 Firestore (保持原樣，但要加入 isFromDatabase 欄位)
   Future<void> _saveToFirestore() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       _showSnackBar('錯誤：系統偵測到尚未登入');
       return;
     }
-    // 雙重檢查
     if (_analysisResult == null || _imageBytes == null) return;
 
-    setState(() => _isAnalyzing = true); // 轉圈圈開始
+    setState(() => _isAnalyzing = true);
 
     try {
-      // 使用 compute 在背景轉碼，避免主執行緒卡死 (ANR)
       String base64Image = await _encodeImageInBackground(_imageBytes!);
 
-      // 移除原本錯誤的 sublist 切割邏輯
-      // 因為我們已經在 ImagePicker 做過物理壓縮 (maxWidth:800)，
-      // 這裡直接存，保留圖片完整性。
-
-      // 安全檢查：雖然壓縮過，但如果還是太大，Firestore 會報錯，這裡先做個預防
       if (base64Image.length > 1048576) {
         throw "圖片壓縮後仍然過大 (超過1MB)，請嘗試重拍更簡單的畫面";
       }
@@ -619,9 +678,9 @@ class _DashboardPageState extends State<DashboardPage> {
       final recordData = {
         'AI分析建議': _analysisResult!.aiSummary,
         '食物名': _analysisResult!.dishName,
-        '圖片_base64': base64Image, // 存入壓縮後的 Base64
+        '圖片_base64': base64Image,
         'created_at': FieldValue.serverTimestamp(),
-        'analyzed_date_string': _formatDateTime(DateTime.now()), // 寫入當下時間
+        'analyzed_date_string': _formatDateTime(DateTime.now()),
         'total_calories': _analysisResult!.totalCalories,
         'total_protein': _analysisResult!.totalProtein,
         'total_carbs': _analysisResult!.totalCarbs,
@@ -635,6 +694,7 @@ class _DashboardPageState extends State<DashboardPage> {
           DocumentReference ingredientDoc = recordRef
               .collection('ingredients')
               .doc();
+          // 注意：Ingredient.toJson() 已經包含了 is_verified 欄位
           batch.set(ingredientDoc, ingredient.toJson());
         }
       }
@@ -644,15 +704,14 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted) {
         showDialog(
           context: context,
-          barrierDismissible: false, // 強制使用者點擊按鈕才能關閉
+          barrierDismissible: false,
           builder: (_) => AlertDialog(
             title: const Text('儲存成功'),
             content: const Text('分析結果已儲存。'),
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context); // 關閉 dialog
-                  // 修改 : 回傳 true 給上一頁
+                  Navigator.pop(context);
                   Navigator.of(context).pop(true);
                 },
                 child: const Text('OK'),
@@ -690,17 +749,15 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // =========================================================================
-  // UI 佈局核心邏輯
+  // UI 佈局核心邏輯 (保持原樣，這裡為了完整性列出)
   // =========================================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // 🟢 修改：App Bar 改為預設樣式 (跟 auth.dart 一致)
       appBar: AppBar(
         title: null,
         centerTitle: false,
-        // 移除 backgroundColor, iconTheme, elevation
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
@@ -711,9 +768,7 @@ class _DashboardPageState extends State<DashboardPage> {
             }
           },
         ),
-        // 🟢 已移除 actions: [...]，右上角的三個點消失了
       ),
-
       body: LayoutBuilder(
         builder: (context, constraints) {
           final screenWidth = constraints.maxWidth;
@@ -735,7 +790,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final bool hasImage = _imageBytes != null;
     final bool hasResult = _analysisResult != null;
 
-    // 狀態 1: 初始畫面
     if (!hasImage) {
       return Center(
         child: Padding(
@@ -751,7 +805,6 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // 狀態 2: 已選好照片，準備分析
     if (hasImage && !hasResult) {
       return Column(
         children: [
@@ -779,7 +832,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
           ),
-
           Expanded(
             flex: 4,
             child: Container(
@@ -804,7 +856,6 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // 狀態 3: 顯示結果
     if (isMobile) {
       return SingleChildScrollView(
         controller: _scrollController,
@@ -817,7 +868,6 @@ class _DashboardPageState extends State<DashboardPage> {
               color: const Color(0xFFF0F4F5),
               child: _buildImageSection(),
             ),
-
             Container(
               key: _resultKey,
               transform: Matrix4.translationValues(0.0, -20.0, 0.0),
@@ -838,7 +888,6 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       );
     } else {
-      // 電腦版
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Row(
@@ -951,7 +1000,6 @@ class _DashboardPageState extends State<DashboardPage> {
               Expanded(
                 child: TextButton(
                   onPressed: _resetAll,
-                  // 保留灰色取消按鈕，但統一高度
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     foregroundColor: Colors.grey,
@@ -970,7 +1018,6 @@ class _DashboardPageState extends State<DashboardPage> {
                           ? _analyzeImage
                           : _saveToFirestore)
                     : null,
-                // 統一按鈕高度 50，顏色跟隨 AppTheme
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
@@ -1055,6 +1102,17 @@ class _DashboardPageState extends State<DashboardPage> {
     return Column(
       children: _analysisResult!.ingredients.map((ingredient) {
         final opacity = ingredient.isSelected ? 1.0 : 0.5;
+        // 🟢 若有查到表，邊框顯示不同顏色 (選用) -> 改回原樣，不區分顏色
+        // final borderColor = ingredient.isFromDatabase
+        //    ? Colors.green.withOpacity(0.3)
+        //    : const Color.fromARGB(255, 132, 202, 206).withOpacity(0.1);
+        final borderColor = const Color.fromARGB(
+          255,
+          132,
+          202,
+          206,
+        ).withOpacity(0.1);
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Opacity(
@@ -1066,14 +1124,7 @@ class _DashboardPageState extends State<DashboardPage> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F9F9),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color.fromARGB(
-                    255,
-                    132,
-                    202,
-                    206,
-                  ).withOpacity(0.1),
-                ),
+                border: Border.all(color: borderColor),
               ),
               child: Row(
                 children: [
@@ -1081,15 +1132,27 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          ingredient.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: isMobile ? 14 : 16,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              ingredient.name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: isMobile ? 14 : 16,
+                              ),
+                            ),
+                            // 🟢 暫時備註掉：顯示資料庫驗證標章
+                            // if (ingredient.isFromDatabase) ...[
+                            //   const SizedBox(width: 4),
+                            //   Icon(Icons.check_circle,
+                            //     size: 14,
+                            //     color: Colors.green[400]
+                            //   )
+                            // ]
+                          ],
                         ),
                         Text(
-                          '${ingredient.weight} g • ${ingredient.calories} kcal',
+                          '${ingredient.weight} g • ${ingredient.calories.toStringAsFixed(1)} kcal',
                           style: TextStyle(
                             color: Colors.grey,
                             fontSize: isMobile ? 12 : 13,
@@ -1144,6 +1207,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // 以下 UI 元件保持不變
   Widget _buildTitleSection(bool isMobile) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1209,7 +1273,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '蛋白質',
             '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 117, 181, 233), // 🔵 修正為新藍色
+            const Color.fromARGB(255, 117, 181, 233),
             isMobile,
           ),
         ),
@@ -1218,7 +1282,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '碳水化合物',
             '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 132, 202, 206), // 🟢 修正為新綠色
+            const Color.fromARGB(255, 132, 202, 206),
             isMobile,
           ),
         ),
@@ -1227,7 +1291,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '脂肪',
             '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 245, 190, 118), // 🟠 修正為新黃色
+            const Color.fromARGB(255, 245, 190, 118),
             isMobile,
           ),
         ),

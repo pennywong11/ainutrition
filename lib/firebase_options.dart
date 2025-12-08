@@ -85,5 +85,4 @@ class DefaultFirebaseOptions {
     storageBucket: 'nutritionanalyzer-6485e.firebasestorage.app',
     measurementId: 'G-P6ZL2E8SQ9',
   );
-
 }
