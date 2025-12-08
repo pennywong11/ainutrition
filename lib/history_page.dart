@@ -1146,12 +1146,22 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     return showDialog<FoodItem>(
       context: context,
       builder: (BuildContext context) {
+        // 1. 取得螢幕總寬度
+        final double screenWidth = MediaQuery.of(context).size.width;
+
+        // 2. 設定寬度邏輯：
+        // 如果螢幕夠寬 (電腦/平板)，設為 600
+        // 如果是手機，設為螢幕寬度的 90% (留一點邊距)
+        final double dialogWidth = screenWidth > 800 ? 600 : screenWidth * 0.9;
+
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Container(
-            width: 400,
+            width: dialogWidth,
+            // padding: const EdgeInsets.all(24.0), // 避免滾動條被擠壓
+
             // Dialog的內容在FoodEditDialogContent這個Widget裡
             child: FoodEditDialogContent(
               item: item,
