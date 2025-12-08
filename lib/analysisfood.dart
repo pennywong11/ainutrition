@@ -443,7 +443,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 5. 開始分析 (🟢 修改版：整合 AI 辨識 + 本地查表)
+  // 5. 開始分析 (🟢 修改版：整合 AI 辨識 + 本地查表 + 智慧排序)
   // ---------------------------------------------------------------------------
   Future<void> _analyzeImage() async {
     if (_imageBytes == null) return;
@@ -462,7 +462,7 @@ class _DashboardPageState extends State<DashboardPage> {
       // 🟢 Prompt 修改：完美復刻使用者原版邏輯，僅微調加入查表所需欄位
       final prompt =
           """
-      你是一個專業的營養師。請分析這張圖片與描述。
+      你是一個專業的營養師。請依據以下邏輯分析這張圖片與使用者的描述。
       
       使用者描述: "$userInput"
       
@@ -480,20 +480,25 @@ class _DashboardPageState extends State<DashboardPage> {
            -> 輸出：is_food: true, dish_name: 辨識結果(加上文字備註), summary: 依據圖片與文字調整後的總結。
            
          - **情境 B [補救情境]**：圖片模糊/全黑/無法辨識，但使用者有輸入描述。
-           -> 行動：完全信賴使用者描述。
-           -> 輸出：is_food: true, dish_name: "$userInput", summary: "依據文字標準數據計算。"
+           -> 行動：完全信賴使用者描述，提供標準估算值。
+           -> 輸出：is_food: true, dish_name: "$userInput (標準估算)", summary: "因圖片模糊，已依據文字分析提供標準數據。"
            
-         - **情境 C [衝突情境]**：圖片清晰顯示為「非食物」(如貓、椅子)，但使用者輸入食物描述。
-           -> 行動：強制信賴使用者描述。
-           -> 輸出：is_food: true, dish_name: "$userInput (文字估算)", summary: "圖片非食物，依據文字計算。"
+         - **情境 C [衝突情境]**：圖片清晰顯示為「非食物」(如貓、椅子、馬桶)，但使用者有輸入食物描述。
+           -> 行動：**強制信賴使用者描述**，忽略圖片內容。
+           -> 輸出：is_food: true, dish_name: "$userInput (文字估算)", summary: "圖片看起來是[圖片內容]，但已依據您的描述提供$userInput數據。"
+           
+         - **情境 D [無效情境]**：圖片非食物，且使用者「沒有」輸入描述。
+           -> 行動：拒絕服務。
+           -> 輸出：is_food: false, error_msg: "無法辨識為食物，請補充文字說明。"
 
       【嚴格輸出規範】：
-      1. **summary**: 30個中文字內。
-      2. **ingredients**: 
-         - **name**: 寫核心食材名 (如: "豬排", "白飯")。
-         - **weight**: 預估重量(g)。**若使用者說「半飯」，請自動將白飯重量 * 0.5。**
-         - **search_terms**: [重要] 提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。
-         - **calories**: 提供 AI 估算的數值。
+      1. **summary (營養總結)**：請非常精簡，**絕對不要超過 30 個中文字**。直接講重點，不要廢話。
+      2. **ingredients (食材名稱)**：
+         - name: 請**只寫最核心的食材名**，去除所有冗言贅詞、形容詞或補充說明。
+           * 錯誤範例："番茄醬或其他調味"、"新鮮的羅美生菜"
+           * 正確範例："番茄醬"、"羅美生菜"
+         - **search_terms**: [重要] 請提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。越標準越好。例如看到滷蛋，給 ["滷蛋", "雞蛋"]。
+         - **calories, protein, carbs, fat**: [重要] 請針對你預估的重量，提供 AI 估算的總營養素數值，作為查表失敗時的備用數據。
 
       【回傳格式 (JSON Only)】：
       {
@@ -506,7 +511,10 @@ class _DashboardPageState extends State<DashboardPage> {
             "name": "...", 
             "weight": 100, 
             "search_terms": ["關鍵字1", "關鍵字2"],
-            "calories": 0, "protein": 0, "carbs": 0, "fat": 0
+            "calories": 150, 
+            "protein": 5, 
+            "carbs": 20, 
+            "fat": 3
           }
         ]
       }
@@ -570,16 +578,36 @@ class _DashboardPageState extends State<DashboardPage> {
               }
               searchTerms.insert(0, name); // 把原名也加進去搜
 
-              // 3. 查表 (Hybrid Logic)
-              // 搜尋會回傳一個 List，我們取第一個最匹配的
+              // 3. 查表 (Hybrid Logic with Smart Sorting)
               List<FoodItem> matches = [];
               for (var term in searchTerms) {
-                matches = _nutritionService.searchFood(term);
-                if (matches.isNotEmpty) break; // 找到就停止
+                var currentMatches = _nutritionService.searchFood(term);
+
+                if (currentMatches.isNotEmpty) {
+                  // ✨ 智慧排序邏輯 ✨
+                  // 原本只取第一個 (matches.first)，導致 "鮮蝦" 搜到 "泡麵(鮮蝦口味)"
+                  // 現在我們對結果進行排序：
+                  // 1. 完全匹配優先 (名稱跟搜尋字串一模一樣)
+                  // 2. 字數少的優先 (越短通常代表越接近原型食材，例如 "鮮蝦" < "鮮蝦水餃")
+
+                  currentMatches.sort((a, b) {
+                    // A. 完全匹配檢查
+                    bool aExact = a.name == term;
+                    bool bExact = b.name == term;
+                    if (aExact && !bExact) return -1; // a 排前面
+                    if (!aExact && bExact) return 1; // b 排前面
+
+                    // B. 字數長度檢查 (越短越好)
+                    return a.name.length.compareTo(b.name.length);
+                  });
+
+                  matches = currentMatches;
+                  break; // 找到優質結果集就停止嘗試下一個關鍵字
+                }
               }
 
               if (matches.isNotEmpty) {
-                // 🎉 查到了！使用資料庫數據
+                //  查到了！使用資料庫數據
                 final dbFood = matches.first;
 
                 // 衛福部資料是「每 100g」的含量
@@ -591,11 +619,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 fat = dbFood.fat * ratio;
                 carbs = dbFood.carbs * ratio;
 
-                // 可選：更新顯示名稱，加上 (DB) 標記或改成資料庫正式名稱
-                // name = dbFood.name;
                 isVerified = true;
 
-                print("✅ [查表成功] $name 對應到 ${dbFood.name} (ID: ${dbFood.id})");
+                print(
+                  "✅ [查表成功] $name 搜尋 '${searchTerms.first}' -> 對應到: ${dbFood.name} (ID: ${dbFood.id})",
+                );
               } else {
                 print("⚠️ [查無資料] $name 使用 AI 估算值");
               }
@@ -1410,12 +1438,10 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 修改：移除了 IconData 參數，改用 Container 繪製純色圓點
   Widget _buildMiniNutrient(Color color, double value, bool isMobile) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 使用 Container 繪製圓點，比 Icon 更純粹
         Container(
           width: isMobile ? 6 : 8,
           height: isMobile ? 6 : 8,
