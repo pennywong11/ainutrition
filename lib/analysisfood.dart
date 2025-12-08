@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dotted_border/dotted_border.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/cupertino.dart'; // 🟢 引入 iOS 風格元件
+import 'package:flutter/cupertino.dart'; // 引入 iOS 風格元件
 import 'package:flutter/foundation.dart'; // For kIsWeb, compute, defaultTargetPlatform
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
@@ -112,7 +112,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final GlobalKey _resultKey = GlobalKey();
   final ScrollController _scrollController = ScrollController();
 
-  // 🟢 優化 1：新增這個函式，在背景執行緒將圖片轉為 Base64
+  // 優化 1：新增這個函式，在背景執行緒將圖片轉為 Base64
   // 這能避免主畫面卡死導致 System UI 無回應
   static Future<String> _encodeImageInBackground(Uint8List bytes) async {
     return compute((Uint8List b) => base64Encode(b), bytes);
@@ -168,7 +168,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // 3. 選擇圖片邏輯 (真正的跨平台原生體驗 + Web 支援)
   // ---------------------------------------------------------------------------
   Future<void> _showImagePickerOptions() async {
-    // 🟢 修正：如果是 Web (Chrome 網頁版)，直接開資料夾，不要跳選單
+    //  修正：如果是 Web (Chrome 網頁版)，直接開資料夾，不要跳選單
     if (kIsWeb) {
       await _pickImageFromGallery();
       return;
@@ -295,7 +295,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
-        // 🟢 優化 2：物理壓縮
+        // 物理壓縮
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -311,7 +311,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        // 🟢 優化 2：物理壓縮
+        // 物理壓縮
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -327,7 +327,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        // 🟢 優化 2：物理壓縮
+        // 物理壓縮
         maxWidth: 800,
         maxHeight: 800,
         imageQuality: 70,
@@ -346,7 +346,7 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        scrollable: true, // 🟢 修正 2: 啟用 Dialog 內建捲動
+        scrollable: true, // 啟用 Dialog 內建捲動
         title: const Text(
           '確認照片',
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -458,7 +458,7 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final userInput = _promptController.text.trim();
 
-      // 🟢 修改：在 Prompt 中加入「嚴格輸出規範」，限制字數與名稱長度
+      // 修改：在 Prompt 中加入「嚴格輸出規範」，限制字數與名稱長度
       final prompt =
           """
       你是一個專業的營養師。請依據以下邏輯分析這張圖片與使用者的描述。
@@ -596,10 +596,10 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() => _isAnalyzing = true); // 轉圈圈開始
 
     try {
-      // 🟢 優化 3：使用 compute 在背景轉碼，避免主執行緒卡死 (ANR)
+      // 使用 compute 在背景轉碼，避免主執行緒卡死 (ANR)
       String base64Image = await _encodeImageInBackground(_imageBytes!);
 
-      // 🟢 優化 4：移除原本錯誤的 sublist 切割邏輯
+      // 移除原本錯誤的 sublist 切割邏輯
       // 因為我們已經在 ImagePicker 做過物理壓縮 (maxWidth:800)，
       // 這裡直接存，保留圖片完整性。
 
@@ -950,7 +950,7 @@ class _DashboardPageState extends State<DashboardPage> {
               Expanded(
                 child: TextButton(
                   onPressed: _resetAll,
-                  // 🟢 保留灰色取消按鈕，但統一高度
+                  // 保留灰色取消按鈕，但統一高度
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     foregroundColor: Colors.grey,
@@ -969,7 +969,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           ? _analyzeImage
                           : _saveToFirestore)
                     : null,
-                // 🟢 統一按鈕高度 50，顏色跟隨 AppTheme
+                // 統一按鈕高度 50，顏色跟隨 AppTheme
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
                 ),
@@ -1101,19 +1101,16 @@ class _DashboardPageState extends State<DashboardPage> {
                           spacing: isMobile ? 6 : 8,
                           children: [
                             _buildMiniNutrient(
-                              Icons.circle,
                               const Color.fromARGB(255, 117, 181, 233),
                               ingredient.protein,
                               isMobile,
                             ),
                             _buildMiniNutrient(
-                              Icons.circle,
                               const Color.fromARGB(255, 132, 202, 206),
                               ingredient.carbs,
                               isMobile,
                             ),
                             _buildMiniNutrient(
-                              Icons.circle,
                               const Color.fromARGB(255, 245, 190, 118),
                               ingredient.fat,
                               isMobile,
@@ -1213,7 +1210,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '蛋白質',
             '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 117, 181, 233), // 🔵 修正為新藍色
+            const Color.fromARGB(255, 117, 181, 233),
             isMobile,
           ),
         ),
@@ -1222,7 +1219,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '碳水化合物',
             '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 132, 202, 206), // 🟢 修正為新綠色
+            const Color.fromARGB(255, 132, 202, 206),
             isMobile,
           ),
         ),
@@ -1231,7 +1228,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '脂肪',
             '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 245, 190, 118), // 🟠 修正為新黃色
+            const Color.fromARGB(255, 245, 190, 118),
             isMobile,
           ),
         ),
@@ -1246,19 +1243,19 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         _buildLabel(
           Icons.restaurant_menu,
-          const Color.fromARGB(255, 117, 181, 233), // 🔵 修正為新藍色
+          const Color.fromARGB(255, 117, 181, 233),
           '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.eco,
-          const Color.fromARGB(255, 132, 202, 206), // 🟢 修正為新綠色
+          const Color.fromARGB(255, 132, 202, 206),
           '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
           isMobile,
         ),
         _buildLabel(
           Icons.water_drop,
-          const Color.fromARGB(255, 245, 190, 118), // 🟠 修正為新黃色
+          const Color.fromARGB(255, 245, 190, 118),
           '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
           isMobile,
         ),
@@ -1377,16 +1374,17 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildMiniNutrient(
-    IconData icon,
-    Color color,
-    double value,
-    bool isMobile,
-  ) {
+  // 修改：移除了 IconData 參數，改用 Container 繪製純色圓點
+  Widget _buildMiniNutrient(Color color, double value, bool isMobile) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: isMobile ? 6 : 8, color: color),
+        // 使用 Container 繪製圓點，比 Icon 更純粹
+        Container(
+          width: isMobile ? 6 : 8,
+          height: isMobile ? 6 : 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 4),
         Text(
           '${value.toStringAsFixed(1)} g',
