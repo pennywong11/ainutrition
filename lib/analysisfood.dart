@@ -621,7 +621,7 @@ class _DashboardPageState extends State<DashboardPage> {
         '食物名': _analysisResult!.dishName,
         '圖片_base64': base64Image, // 存入壓縮後的 Base64
         'created_at': FieldValue.serverTimestamp(),
-        'analyzed_date_string': _formatDateTime(_analysisResult!.analyzedTime),
+        'analyzed_date_string': _formatDateTime(DateTime.now()), // 寫入當下時間
         'total_calories': _analysisResult!.totalCalories,
         'total_protein': _analysisResult!.totalProtein,
         'total_carbs': _analysisResult!.totalCarbs,
@@ -652,7 +652,8 @@ class _DashboardPageState extends State<DashboardPage> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(context); // 關閉 dialog
-                  Navigator.of(context).pop(); // 直接退出 dashboard 頁面，回到首頁
+                  // 修改 : 回傳 true 給上一頁
+                  Navigator.of(context).pop(true);
                 },
                 child: const Text('OK'),
               ),
@@ -1042,8 +1043,6 @@ class _DashboardPageState extends State<DashboardPage> {
             color: Colors.black87,
           ),
         ),
-        const SizedBox(height: 8),
-        _buildNutritionLabels(isMobile),
         const SizedBox(height: 12),
         _buildIngredientsList(isMobile),
         const SizedBox(height: 16),
@@ -1210,7 +1209,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '蛋白質',
             '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 117, 181, 233),
+            const Color.fromARGB(255, 117, 181, 233), // 🔵 修正為新藍色
             isMobile,
           ),
         ),
@@ -1219,7 +1218,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '碳水化合物',
             '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 132, 202, 206),
+            const Color.fromARGB(255, 132, 202, 206), // 🟢 修正為新綠色
             isMobile,
           ),
         ),
@@ -1228,36 +1227,9 @@ class _DashboardPageState extends State<DashboardPage> {
           child: _buildNutrientCard(
             '脂肪',
             '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-            const Color.fromARGB(255, 245, 190, 118),
+            const Color.fromARGB(255, 245, 190, 118), // 🟠 修正為新黃色
             isMobile,
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNutritionLabels(bool isMobile) {
-    return Wrap(
-      spacing: isMobile ? 8 : 12,
-      runSpacing: 8,
-      children: [
-        _buildLabel(
-          Icons.restaurant_menu,
-          const Color.fromARGB(255, 117, 181, 233),
-          '${_analysisResult!.totalProtein.toStringAsFixed(1)} g',
-          isMobile,
-        ),
-        _buildLabel(
-          Icons.eco,
-          const Color.fromARGB(255, 132, 202, 206),
-          '${_analysisResult!.totalCarbs.toStringAsFixed(1)} g',
-          isMobile,
-        ),
-        _buildLabel(
-          Icons.water_drop,
-          const Color.fromARGB(255, 245, 190, 118),
-          '${_analysisResult!.totalFat.toStringAsFixed(1)} g',
-          isMobile,
         ),
       ],
     );

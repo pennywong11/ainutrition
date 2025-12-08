@@ -101,9 +101,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   bool _isGoalSet = false;
 
   // 預設目標值(成人建議值)，當沒讀到資料時會顯示這些值
-  double _targetCalories = 2000; 
-  double _targetProtein = 60; 
-  double _targetCarbs = 300; 
+  double _targetCalories = 2000;
+  double _targetProtein = 60;
+  double _targetCarbs = 300;
   double _targetFat = 60;
 
   // UI顯示用的資料清單(會隨著Firebase更新而自動變動)
@@ -143,7 +143,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             try {
               // 從 Firestore 讀取資料 (使用 tryParse 防止格式錯誤導致當機)
               String gender = data!['gender'].toString();
-              
+
               // 處理數值轉換，如果資料庫存的是 String 也能轉成 int/double
               int age = int.tryParse(data['age'].toString()) ?? 25;
               double height = double.tryParse(data['height'].toString()) ?? 160;
@@ -151,7 +151,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
               // 呼叫剛剛寫好的計算函式
               _calculatePersonalizedTargets(gender, age, height, weight);
-              
             } catch (e) {
               print("計算營養目標時發生錯誤: $e");
             }
@@ -172,8 +171,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // --- 根據個人資料計算 BMR 與 TDEE ---
   void _calculatePersonalizedTargets(
-      String gender, int age, double height, double weight) {
-    
+    String gender,
+    int age,
+    double height,
+    double weight,
+  ) {
     double bmr = 0;
 
     // 1. 計算 BMR (基礎代謝率) - 使用 Mifflin-St Jeor 公式
@@ -187,31 +189,33 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
 
     // 2. 計算 TDEE (每日總消耗熱量)
-    double tdee = bmr * 1.2; 
+    double tdee = bmr * 1.2;
 
-    // 3. 設定三大營養素比例 (依照國人膳食營養素參考攝取量 DRIs 的建議範圍) 
+    // 3. 設定三大營養素比例 (依照國人膳食營養素參考攝取量 DRIs 的建議範圍)
     // 碳水化合物 50-60%, 蛋白質 10-20%, 脂肪 20-30%
     // 這裡我們採用一個均衡的比例：
     double proteinRatio = 0.15; // 蛋白質 15%
-    double carbsRatio = 0.55;   // 碳水 55%
-    double fatRatio = 0.30;     // 脂肪 30%
+    double carbsRatio = 0.55; // 碳水 55%
+    double fatRatio = 0.30; // 脂肪 30%
 
     // 4. 更新 UI 變數 (使用 setState 觸發畫面更新)
     if (mounted) {
       setState(() {
         _targetCalories = tdee;
-        
+
         // 蛋白質 (1克 = 4大卡)
         _targetProtein = (_targetCalories * proteinRatio) / 4;
-        
+
         // 碳水化合物 (1克 = 4大卡)
         _targetCarbs = (_targetCalories * carbsRatio) / 4;
-        
+
         // 脂肪 (1克 = 9大卡)
         _targetFat = (_targetCalories * fatRatio) / 9;
       });
-      
-      print("已更新個人化目標: BMR=${bmr.toStringAsFixed(0)}, TDEE=${_targetCalories.toStringAsFixed(0)}");
+
+      print(
+        "已更新個人化目標: BMR=${bmr.toStringAsFixed(0)}, TDEE=${_targetCalories.toStringAsFixed(0)}",
+      );
     }
   }
 
@@ -225,23 +229,23 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       if (user == null) {
         // 情況 A：偵測到「已登出」
         print("系統：偵測到登出，正在清除畫面資料...");
-        
+
         // 1. 停止監聽 Firestore 資料庫
-        _foodSubscription?.cancel(); 
+        _foodSubscription?.cancel();
 
         // 2. 清空畫面上的資料
         if (mounted) {
           setState(() {
-            _foodList.clear();      // 清空食物列表
-            _isGoalSet = false;     // 重置目標設定狀態
+            _foodList.clear(); // 清空食物列表
+            _isGoalSet = false; // 重置目標設定狀態
             _targetCalories = 2050; // 重置回預設熱量
-            _isLoading = false;     // 停止轉圈圈
+            _isLoading = false; // 停止轉圈圈
           });
         }
       } else {
         // 情況 B：偵測到「已登入」 (包含剛開啟 App 或是剛完成匿名登入)
         print("系統：偵測到使用者 ID: ${user.uid}，開始讀取資料...");
-        
+
         // 開始抓取這個人的資料
         _listenToFirebaseData();
         _checkUserDataStatus();
@@ -435,8 +439,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
   }
 
-
-
   // 計算目前所有食物的總營養(左邊圓餅圖使用)
   _DailyTotals _calculateCurrentTotals() {
     final totals = _DailyTotals();
@@ -565,11 +567,26 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
           backgroundColor: const Color.fromARGB(255, 157, 198, 194),
           foregroundColor: Colors.white,
           child: const Icon(Icons.add, size: 20),
-          onPressed: () {
-            Navigator.push(
+          onPressed: () async {
+            // 🟢 修改重點：接收 DashboardPage 回傳的 true
+            final result = await Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const DashboardPage()),
             );
+
+            // 如果回傳 true，代表有新增資料
+            if (result == true) {
+              if (mounted) {
+                setState(() {
+                  // 1. 將日期切換回「今天」
+                  _selectedDate = DateTime.now();
+                  // 2. 顯示讀取中
+                  _isLoading = true;
+                });
+                // 3. 重新向 Firebase 請求今天的資料
+                _listenToFirebaseData();
+              }
+            }
           },
         ),
       ),
@@ -687,7 +704,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                         centerSpaceRadius: 70,
                         sections: [
                           PieChartSectionData(
-                            color:Color.fromARGB(255, 117, 181, 233),
+                            color: Color.fromARGB(255, 117, 181, 233),
                             value: proteinRingPercent * 100,
                             radius: 30,
                             showTitle: false,
@@ -854,11 +871,23 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             // 營養進度條
             _buildNutrientBar('熱量 (Calories)', Color(0xFFE96A60), calPercent),
             const SizedBox(height: 15),
-            _buildNutrientBar('蛋白質 (Protein)', Color.fromARGB(255, 117, 181, 233), proteinPercent),
+            _buildNutrientBar(
+              '蛋白質 (Protein)',
+              Color.fromARGB(255, 117, 181, 233),
+              proteinPercent,
+            ),
             const SizedBox(height: 15),
-            _buildNutrientBar('碳水化合物 (Carbs)', Color.fromARGB(255, 132, 202, 206), carbPercent),
+            _buildNutrientBar(
+              '碳水化合物 (Carbs)',
+              Color.fromARGB(255, 132, 202, 206),
+              carbPercent,
+            ),
             const SizedBox(height: 15),
-            _buildNutrientBar('脂肪 (Fat)', Color.fromARGB(255, 245, 190, 118), fatPercent),
+            _buildNutrientBar(
+              '脂肪 (Fat)',
+              Color.fromARGB(255, 245, 190, 118),
+              fatPercent,
+            ),
           ],
         ),
       ),
@@ -1122,7 +1151,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Container(
-            width: 400, 
+            width: 400,
             // Dialog的內容在FoodEditDialogContent這個Widget裡
             child: FoodEditDialogContent(
               item: item,
@@ -1277,7 +1306,9 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     // 根據是否刪除，決定顏色與透明度
     final bool isDeleted = ingredient.isDeleted;
     final Color textColor = isDeleted ? Colors.grey[400]! : Colors.black87;
-    final Color subTextColor = isDeleted ? Colors.grey[300]! : Colors.grey[600]!;
+    final Color subTextColor = isDeleted
+        ? Colors.grey[300]!
+        : Colors.grey[600]!;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -1311,8 +1342,12 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   constraints: const BoxConstraints(),
                   // 切換圖示：刪除狀態顯示 + (加回來)，正常狀態顯示 - (刪除)
                   icon: Icon(
-                    isDeleted ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                    color: isDeleted ? Colors.teal : Colors.red[300], // 刪除時變綠色(加回)，平時紅色
+                    isDeleted
+                        ? Icons.add_circle_outline
+                        : Icons.remove_circle_outline,
+                    color: isDeleted
+                        ? Colors.teal
+                        : Colors.red[300], // 刪除時變綠色(加回)，平時紅色
                     size: 24, // 稍微加大一點點比較好按
                   ),
                   onPressed: () {
@@ -1330,7 +1365,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                           _ingredientsToDelete.remove(ingredient.id!);
                         }
                       }
-                      
+
                       // 3. 重新計算總數 (_calculateTotals 會自動過濾掉 isDeleted 的項目)
                       _calculateTotals();
                     });
@@ -1353,11 +1388,23 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  _buildMacroInfo(Icons.eco, Color.fromARGB(255, 132, 202, 206), ingredient.carbs),
+                  _buildMacroInfo(
+                    Icons.eco,
+                    Color.fromARGB(255, 132, 202, 206),
+                    ingredient.carbs,
+                  ),
                   const SizedBox(width: 16),
-                  _buildMacroInfo(Icons.restaurant_menu, Color.fromARGB(255, 117, 181, 233), ingredient.protein),
+                  _buildMacroInfo(
+                    Icons.restaurant_menu,
+                    Color.fromARGB(255, 117, 181, 233),
+                    ingredient.protein,
+                  ),
                   const SizedBox(width: 16),
-                  _buildMacroInfo(Icons.water_drop, Color.fromARGB(255, 245, 190, 118), ingredient.fat),
+                  _buildMacroInfo(
+                    Icons.water_drop,
+                    Color.fromARGB(255, 245, 190, 118),
+                    ingredient.fat,
+                  ),
                 ],
               ),
             ),
