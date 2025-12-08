@@ -53,7 +53,7 @@ app.*.map.json
 # Firebase 設定檔
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
-lib/firebase_options.dart
+# lib/firebase_options.dart
 
 # Flutter 自動生成檔案
 .flutter-plugins
