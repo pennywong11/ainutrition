@@ -30,6 +30,7 @@ class FoodItem {
   List<Ingredient> ingredients; // 食材清單(從子集合中去讀取)
   String remark; // 備註(使用者可編輯)
   String aiSuggestion; // AI分析建議(唯讀，不可編輯)
+  String mealType; // 用餐時段(早餐、午餐、晚餐、點心)
 
   FoodItem({
     this.reference,
@@ -37,13 +38,14 @@ class FoodItem {
     required this.name,
     required this.calories,
     required this.imagePath,
-    this.grams = '0', // 給預設值
+    this.grams = '0',
     this.protein = '0',
     this.carbs = '0',
     this.fat = '0',
     required this.ingredients,
     this.remark = '',
     this.aiSuggestion = '',
+    this.mealType = '',
   });
 }
 
@@ -332,7 +334,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 String docId = doc.id;
                 String suggestion = data['AI分析建議'] ?? '';
                 String imgUrl = data['圖片_base64'] ?? data['圖片網址'] ?? '';
-
+                String mealType = (data['meal_type'] ?? '').toString();
                 List<Ingredient> ingredientsList = [];
                 double totalGrams = 0;
                 double totalCalories = 0;
@@ -390,6 +392,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     ingredients: ingredientsList,
                     remark: data['備註'] ?? '',
                     aiSuggestion: suggestion,
+                    mealType: mealType,
                   ),
                 );
               }
@@ -478,12 +481,14 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
-          IconButton(
-            onPressed: () async {
-              // 使用封裝好的函式
-              await _navigateToSettings();
-            },
-            icon: const Icon(Icons.settings),
+          Padding(
+            padding: const EdgeInsets.only(right: 25.0), // 增加右邊距，讓它看起來往左移
+            child: IconButton(
+              onPressed: () async {
+                await _navigateToSettings();
+              },
+              icon: const Icon(Icons.settings),
+            ),
           ),
         ],
       ),
@@ -568,12 +573,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
           foregroundColor: Colors.white,
           child: const Icon(Icons.add, size: 20),
           onPressed: () async {
-            // 🟢 修改重點：接收 DashboardPage 回傳的 true
             final result = await Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const DashboardPage()),
             );
-
             // 如果回傳 true，代表有新增資料
             if (result == true) {
               if (mounted) {
@@ -962,7 +965,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     child: CircularProgressIndicator(),
                   ) // 如果正在讀取，顯示轉圈
                 : _foodList.isEmpty
-                ? const Center(child: Text("還沒有紀錄喔！"))
+                ? const Center(child: Text("目前尚無餐點分析紀錄！"))
                 : ListView.builder(
                     shrinkWrap: true, // 讓 ListView 僅佔用內容所需的空間
                     physics: const NeverScrollableScrollPhysics(), // 禁用內層捲動
@@ -982,9 +985,47 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     );
   }
 
+  // 輔助函式：根據用餐時段回傳對應的 Icon 和 顏色
+  Widget _getMealIcon(String type) {
+    IconData iconData;
+    Color color;
+
+    switch (type) {
+      case '早餐':
+        iconData = Icons.wb_twilight; // 日出/早餐
+        color = Colors.amber;
+        break;
+      case '午餐':
+        iconData = Icons.wb_sunny; // 太陽/午餐
+        color = Colors.orange[400]!;
+        break;
+      case '晚餐':
+        iconData = Icons.nights_stay; // 月亮/晚餐
+        color = Colors.indigoAccent;
+        break;
+      case '點心':
+        iconData = Icons.cookie; // 餅乾/點心
+        color = Colors.pinkAccent;
+        break;
+      default:
+        return const SizedBox.shrink(); // 沒選或不認識的，回傳空 Widget
+    }
+
+    // 回傳一個帶有背景色的小圓圈 Icon
+    return Container(
+      margin: const EdgeInsets.only(right: 12), // 與圖片的距離
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(iconData, size: 20, color: color),
+    );
+  }
+
   // 單一食物項目
   Widget _buildFoodItem(BuildContext context, FoodItem item) {
-    print("檢查圖片資料：[${item.imagePath}]");
+    // print("檢查圖片資料：[${item.imagePath}]");
 
     // 解碼 Base64 圖片（如果存在）
     Uint8List? imageBytes;
@@ -1044,6 +1085,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Row(
           children: [
+            // 如果 mealType 有值 (且不是空字串)，就顯示 Icon
+            if (item.mealType.isNotEmpty) _getMealIcon(item.mealType),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Container(
@@ -1146,23 +1189,17 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     return showDialog<FoodItem>(
       context: context,
       builder: (BuildContext context) {
-        // 1. 取得螢幕總寬度
+        // --- 這是她新增的邏輯 (建議保留) ---
         final double screenWidth = MediaQuery.of(context).size.width;
-
-        // 2. 設定寬度邏輯：
-        // 如果螢幕夠寬 (電腦/平板)，設為 600
-        // 如果是手機，設為螢幕寬度的 90% (留一點邊距)
         final double dialogWidth = screenWidth > 800 ? 600 : screenWidth * 0.9;
+        // --------------------------------
 
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Container(
-            width: dialogWidth,
-            // padding: const EdgeInsets.all(24.0), // 避免滾動條被擠壓
-
-            // Dialog的內容在FoodEditDialogContent這個Widget裡
+            width: dialogWidth, // 使用計算後的寬度
             child: FoodEditDialogContent(
               item: item,
               selectedDate: selectedDate,
@@ -1208,6 +1245,9 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
   bool _isEditingName = false;
   // 用來暫存「準備要刪除」的食材 ID
   final List<String> _ingredientsToDelete = [];
+  // 用餐時段的選項與當前選擇
+  final List<String> _mealOptions = ['早餐', '午餐', '晚餐', '點心'];
+  String? _selectedMealType; // 儲存當前選到的值 (可以是 null)
 
   // 建立一個可自動計算所有食材總和的函式
   void _calculateTotals() {
@@ -1251,6 +1291,12 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
     _ingredients = List.from(widget.item.ingredients);
     _calculateTotals(); // 呼叫計算函式，填入初始總和
+
+    // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
+    if (widget.item.mealType.isNotEmpty &&
+        _mealOptions.contains(widget.item.mealType)) {
+      _selectedMealType = widget.item.mealType;
+    }
   }
 
   @override
@@ -1273,13 +1319,34 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     TextInputType keyboardType = TextInputType.number,
     bool enabled = true,
     Color? backgroundColor,
+    Color? dotColor,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 如果有傳入顏色，就顯示小圓點
+            if (dotColor != null) ...[
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6), // 圓點跟文字的間距
+            ],
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11.5,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -1339,12 +1406,15 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  ingredient.name,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: textColor, // 套用顏色
+                Expanded(
+                  child: Text(
+                    ingredient.name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                    overflow: TextOverflow.ellipsis, // 太長變 ...
                   ),
                 ),
                 IconButton(
@@ -1399,19 +1469,19 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
                   _buildMacroInfo(
-                    Icons.eco,
-                    Color.fromARGB(255, 132, 202, 206),
-                    ingredient.carbs,
-                  ),
-                  const SizedBox(width: 16),
-                  _buildMacroInfo(
-                    Icons.restaurant_menu,
+                    Icons.circle,
                     Color.fromARGB(255, 117, 181, 233),
                     ingredient.protein,
                   ),
                   const SizedBox(width: 16),
                   _buildMacroInfo(
-                    Icons.water_drop,
+                    Icons.circle,
+                    Color.fromARGB(255, 132, 202, 206),
+                    ingredient.carbs,
+                  ),
+                  const SizedBox(width: 16),
+                  _buildMacroInfo(
+                    Icons.circle,
                     Color.fromARGB(255, 245, 190, 118),
                     ingredient.fat,
                   ),
@@ -1485,7 +1555,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     }
     // SingleChildScrollView可確保鍵盤彈出時內容不會溢位
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(16.0),
       child: Column(
         mainAxisSize: MainAxisSize.min, // 讓Column符合內容高度
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1502,7 +1572,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   child: imageWidget,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1553,9 +1623,9 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    // 時間
                     Row(
                       children: [
+                        // A. 日期部分
                         Icon(
                           Icons.access_time,
                           size: 16,
@@ -1563,9 +1633,55 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          // 使用 widget.selectedDate 來動態格式化
                           "${widget.selectedDate.year}/${widget.selectedDate.month.toString().padLeft(2, '0')}/${widget.selectedDate.day.toString().padLeft(2, '0')}",
-                          style: TextStyle(color: Colors.grey[600]),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
+                        ),
+
+                        const SizedBox(width: 12), // 日期和選單中間的間距
+                        // B. 下拉選單部分
+                        Container(
+                          height: 30, // 高度稍微調小一點，讓它跟日期看起來比較協調
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedMealType,
+                              hint: Text(
+                                '選擇時段',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                              icon: const Icon(Icons.arrow_drop_down, size: 18),
+                              isDense: true, // 讓選單緊湊
+                              style: const TextStyle(
+                                color: Colors.black87,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              onChanged: (String? newValue) {
+                                setState(() {
+                                  _selectedMealType = newValue;
+                                });
+                              },
+                              items: _mealOptions.map<DropdownMenuItem<String>>(
+                                (String value) {
+                                  return DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(value),
+                                  );
+                                },
+                              ).toList(),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1581,15 +1697,15 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             children: [
               Expanded(
                 child: _buildLabeledTextField(
-                  '總克數 (g)',
+                  '  總克數 (g)',
                   _gramController,
                   enabled: false,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildLabeledTextField(
-                  '熱量 (kcal)',
+                  '  熱量 (kcal)',
                   _calController,
                   enabled: false,
                 ),
@@ -1601,25 +1717,28 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             children: [
               Expanded(
                 child: _buildLabeledTextField(
-                  '蛋白質 (g)',
+                  '蛋白質(g)',
                   _proteinController,
                   enabled: false,
+                  dotColor: const Color.fromARGB(255, 117, 181, 233),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildLabeledTextField(
-                  '碳水化合物 (g)',
+                  '碳水(g)',
                   _carbController,
                   enabled: false,
+                  dotColor: const Color.fromARGB(255, 132, 202, 206),
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 8),
               Expanded(
                 child: _buildLabeledTextField(
-                  '脂肪 (g)',
+                  '脂肪(g)',
                   _fatController,
                   enabled: false,
+                  dotColor: const Color.fromARGB(255, 245, 190, 118),
                 ),
               ),
             ],
@@ -1736,6 +1855,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                       await widget.item.reference!.update({
                         '食物名': _nameController.text,
                         '備註': _remarksController.text,
+                        // 儲存用餐時段 (如果為 null 則存空字串)
+                        'meal_type': _selectedMealType ?? '',
                         'total_calories':
                             double.tryParse(_calController.text) ?? 0,
                         'total_protein':
