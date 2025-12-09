@@ -48,6 +48,7 @@ app.*.map.json
 /android/app/release
 
 .env
+set_admin.py
 # 補充這些到你的 .gitignore 中：
 
 # Firebase 設定檔
