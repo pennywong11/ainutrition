@@ -8,28 +8,22 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料�
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
-import 'analysisfood.dart'; // 假設 DashboardPage 在這裡
-import 'settings.dart'; // 假設 SettingsPage 在這裡
 
-// ----------------------------------------------
-// 資料模型區(Models)：定義資料的樣子
-// ----------------------------------------------
-
-// 每個"食物"的資料結構
+// 資料模型
 // 對應Firebase的路徑：users/uid/analysis_records/{document}
 class FoodItem {
-  String id; // 文件ID(刪除、修改用的)
+  String id;                    // 文件ID(刪除、修改用的)
   DocumentReference? reference; // 用來記住這筆資料在 Firebase 的準確位置
-  String name; // 食物名稱
-  String calories; // 總熱量
-  String imagePath; // 圖片網址(Firebase Storage URL或外部連結)
-  String grams; // 總熱量
-  String protein; // 總蛋白質
-  String carbs; // 總碳水化合物
-  String fat; // 總脂肪
+  String name;                  // 食物名稱
+  String calories;              // 總熱量
+  String imagePath;             // 圖片網址(Firebase Storage URL或外部連結)
+  String grams;                 // 總熱量
+  String protein;               // 總蛋白質
+  String carbs;                 // 總碳水化合物
+  String fat;                   // 總脂肪
   List<Ingredient> ingredients; // 食材清單(從子集合中去讀取)
-  String remark; // 備註(使用者可編輯)
-  String aiSuggestion; // AI分析建議(唯讀，不可編輯)
+  String remark;                // 備註(使用者可編輯)
+  String aiSuggestion;          // AI分析建議(唯讀，不可編輯)
 
   FoodItem({
     this.reference,
@@ -37,7 +31,7 @@ class FoodItem {
     required this.name,
     required this.calories,
     required this.imagePath,
-    this.grams = '0', // 給預設值
+    this.grams = '0', 
     this.protein = '0',
     this.carbs = '0',
     this.fat = '0',
@@ -79,10 +73,7 @@ class _DailyTotals {
   double fat = 0;
 }
 
-// ----------------------------------------------
-// 首頁(儀表板+列表)
-// ----------------------------------------------
-
+// 首頁
 class NutritionHomePage extends StatefulWidget {
   const NutritionHomePage({super.key});
 
@@ -123,7 +114,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         if (doc.exists) {
           final data = doc.data();
 
-          // 定義什麼叫做「資料完整」：性別、年齡、身高、體重 都不可以是 null
           bool isComplete =
               data != null &&
               data['gender'] != null &&
@@ -133,8 +123,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
           if (mounted) {
             setState(() {
-              // 更新狀態：如果完整，_isGoalSet 為 true (紅字消失)
-              // 如果不完整，_isGoalSet 為 false (紅字顯示)
               _isGoalSet = isComplete;
               print("資料完整性檢查結果: $_isGoalSet"); // Debug log
             });
@@ -456,13 +444,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // --- 前往設定頁面並在返回時更新狀態 ---
   Future<void> _navigateToSettings() async {
-    // 等待設定頁面關閉
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const SettingsPage()),
-    );
+    await Navigator.pushNamed(context, '/settings');
 
-    // !!! 關鍵修改：無論回傳什麼，只要從設定頁回來，就檢查一次狀態 !!!
     if (mounted) {
       print("從設定頁返回，正在重新檢查資料完整性...");
       await _checkUserDataStatus();
@@ -569,18 +552,13 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
           child: const Icon(Icons.add, size: 20),
           onPressed: () async {
             // 🟢 修改重點：接收 DashboardPage 回傳的 true
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const DashboardPage()),
-            );
+            final result = await Navigator.pushNamed(context, '/');
 
-            // 如果回傳 true，代表有新增資料
+            // 有新增資料將日期切換回「今天」
             if (result == true) {
               if (mounted) {
                 setState(() {
-                  // 1. 將日期切換回「今天」
                   _selectedDate = DateTime.now();
-                  // 2. 顯示讀取中
                   _isLoading = true;
                 });
                 // 3. 重新向 Firebase 請求今天的資料
@@ -598,14 +576,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     // 在build時自動計算總合
     final _DailyTotals currentTotals = _calculateCurrentTotals();
 
-    // 計算百分比(0.0-1.0之間)
     // 加上 .clamp(0, 1) 確保百分比不會超過 100% (不會溢出進度條)
-    final double calPercent = (currentTotals.calories / _targetCalories).clamp(
-      0,
-      1,
-    );
-    final double proteinPercent = (currentTotals.protein / _targetProtein)
-        .clamp(0, 1);
+    final double calPercent = (currentTotals.calories / _targetCalories).clamp(0, 1);
+    final double proteinPercent = (currentTotals.protein / _targetProtein).clamp(0, 1);
     final double carbPercent = (currentTotals.carbs / _targetCarbs).clamp(0, 1);
     final double fatPercent = (currentTotals.fat / _targetFat).clamp(0, 1);
 
