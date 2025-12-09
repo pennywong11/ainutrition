@@ -640,43 +640,48 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             ),
             const SizedBox(height: 20),
             
-            isMobile
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            if (isMobile)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 標題 + 提示 icon
+                  Row(
                     children: [
                       const Text(
                         '成人每日建議營養攝取量',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                       ),
-                      if (!_isGoalSet) ...[
-                        const SizedBox(height: 8), 
-                        Align(
-                          alignment: Alignment.centerLeft, 
-                          child: _buildSetGoalButton(),
-                        ),
-                      ],
-                    ],
-                  )
-                : Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          '成人每日建議營養攝取量',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      if (!_isGoalSet) ...[
-                        const SizedBox(width: 8),
-                        _buildSetGoalButton(),
-                      ],
+                      // 這裡插入提示 icon
+                      _buildInfoTooltip(),
                     ],
                   ),
+                  // 如果還沒設定目標，顯示設定按鈕
+                  if (!_isGoalSet) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _buildSetGoalButton(),
+                    ),
+                  ],
+                ],
+              )
+            else
+              // 電腦版
+              Row(
+                children: [
+                  const Text(
+                    '成人每日建議營養攝取量', 
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)
+                  ),
+                  // 這裡插入提示 icon
+                  _buildInfoTooltip(),
+                  
+                  const Spacer(), // 讓後面的按鈕靠右對齊 (如果您希望它靠左，可以用 SizedBox(width: 8))
+                  
+                  if (!_isGoalSet) 
+                    _buildSetGoalButton(),
+                ],
+              ),
 
             const SizedBox(height: 15),
 
@@ -752,6 +757,33 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoTooltip() {
+    return Tooltip(
+      message: '進度條將依據您的個人資料\n計算每日的營養攝取目標，\n並顯示目前各類的攝取達成率。',
+      preferBelow: false,
+      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      verticalOffset: 12,
+      showDuration: const Duration(seconds: 3),
+      decoration: BoxDecoration(
+        color: Colors.grey[600]?.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      textStyle: const TextStyle(color: Colors.white, fontSize: 12),
+      child: Transform.translate(
+        offset: const Offset(0, 3.0), // 這裡控制移動：往右 0，往下 3.0
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
+          child: Icon(
+            Icons.info_outline_rounded,
+            size: 18,
+            color: Colors.grey[600],
+          ),
         ),
       ),
     );
