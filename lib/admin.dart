@@ -392,7 +392,7 @@ class _AdminPageState extends State<AdminPage> {
                   if (mounted) {
                     Navigator.pushNamedAndRemoveUntil(
                       context,
-                      "/auth",
+                      "/",
                       (_) => false,
                     );
                   }
