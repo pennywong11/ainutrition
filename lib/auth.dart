@@ -120,7 +120,7 @@ class _LoginPageState extends State<LoginPage> {
                 Navigator.pop(context); // 關閉 dialog
                 Navigator.pushNamedAndRemoveUntil(
                   context,
-                  '/',
+                  '/admin',
                   (route) => false,
                 );
               },

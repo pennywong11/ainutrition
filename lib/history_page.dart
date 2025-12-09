@@ -403,7 +403,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         elevation: 0,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 25.0),
+            padding: const EdgeInsets.only(right: 25.0), // 增加右邊距，讓它看起來往左移
             child: IconButton(
               onPressed: () async {
                 await _navigateToSettings();
@@ -458,9 +458,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
           foregroundColor: Colors.white,
           child: const Icon(Icons.add, size: 20),
           onPressed: () async {
-            // !!! 修改處：改用 pushNamed 跳轉到分析頁 (/analysis) !!!
             final result = await Navigator.pushNamed(context, '/analysis');
-            
+
             // 如果回傳 true，代表有新增資料
             if (result == true) {
               if (mounted) {
@@ -841,6 +840,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     );
   }
 
+  // 輔助函式：根據用餐時段回傳對應的 Icon 和 顏色
   Widget _getMealIcon(String type) {
     IconData iconData;
     Color color;
@@ -880,6 +880,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   // 單一食物項目
   Widget _buildFoodItem(BuildContext context, FoodItem item) {
     // print("檢查圖片資料：[${item.imagePath}]");
+    Uint8List? imageBytes;
     Widget imageWidget;
 
     if (item.imagePath.startsWith('data:image') ||
@@ -925,6 +926,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Row(
           children: [
+            // 如果 mealType 有值 (且不是空字串)，就顯示 Icon
             if (item.mealType.isNotEmpty) _getMealIcon(item.mealType),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
@@ -1029,7 +1031,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Container(
-            width: dialogWidth, 
+            width: dialogWidth, // 使用計算後的寬度
             child: FoodEditDialogContent(
               item: item,
               selectedDate: selectedDate,
@@ -1109,8 +1111,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _remarksController = TextEditingController(text: widget.item.remark);
 
     _ingredients = List.from(widget.item.ingredients);
-    _calculateTotals(); 
-
+    _calculateTotals(); // 呼叫計算函式，填入初始總和
+    // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
     if (widget.item.mealType.isNotEmpty &&
         _mealOptions.contains(widget.item.mealType)) {
       _selectedMealType = widget.item.mealType;
@@ -1152,12 +1154,13 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 6), 
+              const SizedBox(width: 6), // 圓點跟文字的間距
             ],
             Text(
               label,
               style: const TextStyle(
-                  fontWeight: FontWeight.w600, fontSize: 11.5),
+              fontWeight: FontWeight.w600, fontSize: 11.5),
+
             ),
           ],
         ),
@@ -1409,6 +1412,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                     const SizedBox(height: 4),
                     Row(
                       children: [
+                        // A. 日期部分
                         Icon(
                           Icons.access_time,
                           size: 16,
@@ -1647,6 +1651,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                       await widget.item.reference!.update({
                         '食物名': _nameController.text,
                         '備註': _remarksController.text,
+                        
+                        // 儲存用餐時段 (如果為 null 則存空字串)
                         'meal_type': _selectedMealType ?? '',
                         'total_calories':
                             double.tryParse(_calController.text) ?? 0,

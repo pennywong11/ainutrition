@@ -11,8 +11,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
 
-// 🟢 請根據你的檔案結構，正確引入 NutritionService
-// 假設檔案放在 lib/services/nutrition_service.dart
 import '../services/nutrition_service.dart';
 
 // -----------------------------------------------------------------------------
@@ -27,7 +25,7 @@ class Ingredient {
   double carbs;
   double fat;
   bool isSelected; // 用於控制是否包含在總計算中
-  bool isFromDatabase; // 🟢 新增：標記是否來自資料庫 (UI可選用)
+  bool isFromDatabase; // 標記是否來自資料庫
 
   Ingredient({
     required this.name,
@@ -51,14 +49,17 @@ class Ingredient {
     );
   }
 
+  // 存入 Firestore 時，四捨五入至小數點第二位
   Map<String, dynamic> toJson() {
+    double round2(double val) => double.parse(val.toStringAsFixed(2));
+
     return {
       '食材名': name,
-      '重量(g)': weight,
-      '熱量(kcal)': calories,
-      '蛋白質(g)': protein,
-      '碳水化合物(g)': carbs,
-      '脂肪(g)': fat,
+      '重量(g)': round2(weight),
+      '熱量(kcal)': round2(calories),
+      '蛋白質(g)': round2(protein),
+      '碳水化合物(g)': round2(carbs),
+      '脂肪(g)': round2(fat),
       'is_verified': isFromDatabase,
     };
   }
@@ -115,7 +116,7 @@ class _DashboardPageState extends State<DashboardPage> {
   late final GenerativeModel _model;
   bool _isApiKeyLoaded = false;
 
-  // 🟢 宣告 NutritionService
+  // 宣告 NutritionService
   final NutritionService _nutritionService = NutritionService();
 
   // 定位 Key 與 滾動控制器
@@ -132,7 +133,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _initializeAuth();
     _initializeAI();
 
-    // 🟢 啟動時載入 CSV 資料庫
+    // 啟動時載入 CSV 資料庫
     _nutritionService.loadCsvData();
   }
 
@@ -176,7 +177,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 3. 選擇圖片邏輯 (保持原樣)
+  // 3. 選擇圖片邏輯
   // ---------------------------------------------------------------------------
   Future<void> _showImagePickerOptions() async {
     if (kIsWeb) {
@@ -385,7 +386,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 50),
                     ),
-                    child: const Text('使用此照片'),
+                    child: const Text('確定'),
                   ),
                 ),
               ],
@@ -443,7 +444,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ---------------------------------------------------------------------------
-  // 5. 開始分析 (🟢 修改版：整合 AI 辨識 + 本地查表 + 智慧排序)
+  // 5. 開始分析
   // ---------------------------------------------------------------------------
   Future<void> _analyzeImage() async {
     if (_imageBytes == null) return;
@@ -459,7 +460,7 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final userInput = _promptController.text.trim();
 
-      // 🟢 Prompt 修改：完美復刻使用者原版邏輯，僅微調加入查表所需欄位
+      // Prompt 修改
       final prompt =
           """
       你是一個專業的營養師。請依據以下邏輯分析這張圖片與使用者的描述。
@@ -559,7 +560,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
           List<Ingredient> ingredients = [];
           if (data['ingredients'] != null) {
-            // 🟢 核心邏輯：遍歷每個食材，先查表，查不到才用 AI 數據
+            // 核心邏輯：遍歷每個食材，先查表，查不到才用 AI 數據
             for (var item in data['ingredients']) {
               String name = item['name'] ?? '未知食材';
               double weight = (item['weight'] ?? 0).toDouble();
@@ -576,7 +577,7 @@ class _DashboardPageState extends State<DashboardPage> {
               if (item['search_terms'] != null) {
                 searchTerms = List<String>.from(item['search_terms']);
               }
-              searchTerms.insert(0, name); // 把原名也加進去搜
+              searchTerms.insert(0, name);
 
               // 3. 查表 (Hybrid Logic with Smart Sorting)
               List<FoodItem> matches = [];
@@ -584,32 +585,24 @@ class _DashboardPageState extends State<DashboardPage> {
                 var currentMatches = _nutritionService.searchFood(term);
 
                 if (currentMatches.isNotEmpty) {
-                  // ✨ 智慧排序邏輯 ✨
-                  // 原本只取第一個 (matches.first)，導致 "鮮蝦" 搜到 "泡麵(鮮蝦口味)"
-                  // 現在我們對結果進行排序：
-                  // 1. 完全匹配優先 (名稱跟搜尋字串一模一樣)
-                  // 2. 字數少的優先 (越短通常代表越接近原型食材，例如 "鮮蝦" < "鮮蝦水餃")
-
+                  // 智慧排序邏輯
                   currentMatches.sort((a, b) {
-                    // A. 完全匹配檢查
                     bool aExact = a.name == term;
                     bool bExact = b.name == term;
-                    if (aExact && !bExact) return -1; // a 排前面
-                    if (!aExact && bExact) return 1; // b 排前面
-
-                    // B. 字數長度檢查 (越短越好)
+                    if (aExact && !bExact) return -1;
+                    if (!aExact && bExact) return 1;
                     return a.name.length.compareTo(b.name.length);
                   });
 
                   matches = currentMatches;
-                  break; // 找到優質結果集就停止嘗試下一個關鍵字
+                  break;
                 }
               }
 
               if (matches.isNotEmpty) {
-                //  查到了！使用資料庫數據
                 final dbFood = matches.first;
 
+                // 計算數值 (保留原始 double 精度，存檔時再四捨五入)
                 // 衛福部資料是「每 100g」的含量
                 // 公式：總量 = (每100g數值) * (重量 / 100)
                 double ratio = weight / 100.0;
@@ -677,7 +670,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 6. 儲存到 Firestore (保持原樣，但要加入 isFromDatabase 欄位)
+  // 6. 儲存到 Firestore
   Future<void> _saveToFirestore() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
@@ -703,16 +696,19 @@ class _DashboardPageState extends State<DashboardPage> {
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
+      // 存入總數據時，四捨五入至小數點第二位
+      double round2(double val) => double.parse(val.toStringAsFixed(2));
+
       final recordData = {
         'AI分析建議': _analysisResult!.aiSummary,
         '食物名': _analysisResult!.dishName,
         '圖片_base64': base64Image,
         'created_at': FieldValue.serverTimestamp(),
         'analyzed_date_string': _formatDateTime(DateTime.now()),
-        'total_calories': _analysisResult!.totalCalories,
-        'total_protein': _analysisResult!.totalProtein,
-        'total_carbs': _analysisResult!.totalCarbs,
-        'total_fat': _analysisResult!.totalFat,
+        'total_calories': round2(_analysisResult!.totalCalories),
+        'total_protein': round2(_analysisResult!.totalProtein),
+        'total_carbs': round2(_analysisResult!.totalCarbs),
+        'total_fat': round2(_analysisResult!.totalFat),
       };
 
       batch.set(recordRef, recordData);
@@ -722,7 +718,7 @@ class _DashboardPageState extends State<DashboardPage> {
           DocumentReference ingredientDoc = recordRef
               .collection('ingredients')
               .doc();
-          // 注意：Ingredient.toJson() 已經包含了 is_verified 欄位
+          // 注意：Ingredient.toJson() 已經內建了四捨五入邏輯
           batch.set(ingredientDoc, ingredient.toJson());
         }
       }
@@ -777,7 +773,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // =========================================================================
-  // UI 佈局核心邏輯 (保持原樣，這裡為了完整性列出)
+  // UI 佈局核心邏輯
   // =========================================================================
 
   @override
@@ -1003,6 +999,7 @@ class _DashboardPageState extends State<DashboardPage> {
         if (_imageBytes != null && _analysisResult == null) ...[
           TextField(
             controller: _promptController,
+            enabled: !_isAnalyzing, // 新增：分析中鎖定輸入框
             decoration: InputDecoration(
               hintText: '補充細節能讓估算更精準 (例：去皮、半飯、無糖...)',
               hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
@@ -1027,7 +1024,7 @@ class _DashboardPageState extends State<DashboardPage> {
             if (_imageBytes != null)
               Expanded(
                 child: TextButton(
-                  onPressed: _resetAll,
+                  onPressed: _isAnalyzing ? null : _resetAll,
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     foregroundColor: Colors.grey,
@@ -1130,7 +1127,8 @@ class _DashboardPageState extends State<DashboardPage> {
     return Column(
       children: _analysisResult!.ingredients.map((ingredient) {
         final opacity = ingredient.isSelected ? 1.0 : 0.5;
-        // 🟢 若有查到表，邊框顯示不同顏色 (選用) -> 改回原樣，不區分顏色
+        // 現在是統一邊框顏色，不區分資料來源
+        // 若有查到表，邊框顯示不同顏色 (選用) -> 改回原樣，不區分顏色
         // final borderColor = ingredient.isFromDatabase
         //    ? Colors.green.withOpacity(0.3)
         //    : const Color.fromARGB(255, 132, 202, 206).withOpacity(0.1);
@@ -1169,7 +1167,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 fontSize: isMobile ? 14 : 16,
                               ),
                             ),
-                            // 🟢 暫時備註掉：顯示資料庫驗證標章
+                            //  暫時備註掉：顯示資料庫驗證標章
                             // if (ingredient.isFromDatabase) ...[
                             //   const SizedBox(width: 4),
                             //   Icon(Icons.check_circle,
