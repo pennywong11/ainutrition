@@ -38,7 +38,7 @@ class FoodItem {
     required this.name,
     required this.calories,
     required this.imagePath,
-    this.grams = '0', 
+    this.grams = '0',
     this.protein = '0',
     this.carbs = '0',
     this.fat = '0',
@@ -103,9 +103,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   bool _isGoalSet = false;
 
   // 預設目標值(成人建議值)，當沒讀到資料時會顯示這些值
-  double _targetCalories = 2000; 
-  double _targetProtein = 60; 
-  double _targetCarbs = 300; 
+  double _targetCalories = 2000;
+  double _targetProtein = 60;
+  double _targetCarbs = 300;
   double _targetFat = 60;
 
   // UI顯示用的資料清單(會隨著Firebase更新而自動變動)
@@ -145,7 +145,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             try {
               // 從 Firestore 讀取資料 (使用 tryParse 防止格式錯誤導致當機)
               String gender = data!['gender'].toString();
-              
+
               // 處理數值轉換，如果資料庫存的是 String 也能轉成 int/double
               int age = int.tryParse(data['age'].toString()) ?? 25;
               double height = double.tryParse(data['height'].toString()) ?? 160;
@@ -153,7 +153,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
               // 呼叫剛剛寫好的計算函式
               _calculatePersonalizedTargets(gender, age, height, weight);
-              
             } catch (e) {
               print("計算營養目標時發生錯誤: $e");
             }
@@ -174,8 +173,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // --- 根據個人資料計算 BMR 與 TDEE ---
   void _calculatePersonalizedTargets(
-      String gender, int age, double height, double weight) {
-    
+    String gender,
+    int age,
+    double height,
+    double weight,
+  ) {
     double bmr = 0;
 
     // 1. 計算 BMR (基礎代謝率) - 使用 Mifflin-St Jeor 公式
@@ -189,31 +191,33 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
 
     // 2. 計算 TDEE (每日總消耗熱量)
-    double tdee = bmr * 1.2; 
+    double tdee = bmr * 1.2;
 
-    // 3. 設定三大營養素比例 (依照國人膳食營養素參考攝取量 DRIs 的建議範圍) 
+    // 3. 設定三大營養素比例 (依照國人膳食營養素參考攝取量 DRIs 的建議範圍)
     // 碳水化合物 50-60%, 蛋白質 10-20%, 脂肪 20-30%
     // 這裡我們採用一個均衡的比例：
     double proteinRatio = 0.15; // 蛋白質 15%
-    double carbsRatio = 0.55;   // 碳水 55%
-    double fatRatio = 0.30;     // 脂肪 30%
+    double carbsRatio = 0.55; // 碳水 55%
+    double fatRatio = 0.30; // 脂肪 30%
 
     // 4. 更新 UI 變數 (使用 setState 觸發畫面更新)
     if (mounted) {
       setState(() {
         _targetCalories = tdee;
-        
+
         // 蛋白質 (1克 = 4大卡)
         _targetProtein = (_targetCalories * proteinRatio) / 4;
-        
+
         // 碳水化合物 (1克 = 4大卡)
         _targetCarbs = (_targetCalories * carbsRatio) / 4;
-        
+
         // 脂肪 (1克 = 9大卡)
         _targetFat = (_targetCalories * fatRatio) / 9;
       });
-      
-      print("已更新個人化目標: BMR=${bmr.toStringAsFixed(0)}, TDEE=${_targetCalories.toStringAsFixed(0)}");
+
+      print(
+        "已更新個人化目標: BMR=${bmr.toStringAsFixed(0)}, TDEE=${_targetCalories.toStringAsFixed(0)}",
+      );
     }
   }
 
@@ -227,23 +231,23 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       if (user == null) {
         // 情況 A：偵測到「已登出」
         print("系統：偵測到登出，正在清除畫面資料...");
-        
+
         // 1. 停止監聽 Firestore 資料庫
-        _foodSubscription?.cancel(); 
+        _foodSubscription?.cancel();
 
         // 2. 清空畫面上的資料
         if (mounted) {
           setState(() {
-            _foodList.clear();      // 清空食物列表
-            _isGoalSet = false;     // 重置目標設定狀態
+            _foodList.clear(); // 清空食物列表
+            _isGoalSet = false; // 重置目標設定狀態
             _targetCalories = 2050; // 重置回預設熱量
-            _isLoading = false;     // 停止轉圈圈
+            _isLoading = false; // 停止轉圈圈
           });
         }
       } else {
         // 情況 B：偵測到「已登入」 (包含剛開啟 App 或是剛完成匿名登入)
         print("系統：偵測到使用者 ID: ${user.uid}，開始讀取資料...");
-        
+
         // 開始抓取這個人的資料
         _listenToFirebaseData();
         _checkUserDataStatus();
@@ -330,7 +334,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 String docId = doc.id;
                 String suggestion = data['AI分析建議'] ?? '';
                 String imgUrl = data['圖片_base64'] ?? data['圖片網址'] ?? '';
-                String mealType = (data['meal_type'] ?? '').toString(); 
+                String mealType = (data['meal_type'] ?? '').toString();
                 List<Ingredient> ingredientsList = [];
                 double totalGrams = 0;
                 double totalCalories = 0;
@@ -438,8 +442,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
   }
 
-
-
   // 計算目前所有食物的總營養(左邊圓餅圖使用)
   _DailyTotals _calculateCurrentTotals() {
     final totals = _DailyTotals();
@@ -479,16 +481,16 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 25.0), // 增加右邊距，讓它看起來往左移
-          child: IconButton(
-            onPressed: () async {
-              await _navigateToSettings();
-            },
-            icon: const Icon(Icons.settings),
+          Padding(
+            padding: const EdgeInsets.only(right: 25.0), // 增加右邊距，讓它看起來往左移
+            child: IconButton(
+              onPressed: () async {
+                await _navigateToSettings();
+              },
+              icon: const Icon(Icons.settings),
+            ),
           ),
-        ),
-      ],
+        ],
       ),
       // 解決Overflow的關鍵：使用 Column+Expanded 限制高度
       body: SafeArea(
@@ -705,7 +707,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                         centerSpaceRadius: 70,
                         sections: [
                           PieChartSectionData(
-                            color:Color.fromARGB(255, 117, 181, 233),
+                            color: Color.fromARGB(255, 117, 181, 233),
                             value: proteinRingPercent * 100,
                             radius: 30,
                             showTitle: false,
@@ -872,11 +874,23 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             // 營養進度條
             _buildNutrientBar('熱量 (Calories)', Color(0xFFE96A60), calPercent),
             const SizedBox(height: 15),
-            _buildNutrientBar('蛋白質 (Protein)', Color.fromARGB(255, 117, 181, 233), proteinPercent),
+            _buildNutrientBar(
+              '蛋白質 (Protein)',
+              Color.fromARGB(255, 117, 181, 233),
+              proteinPercent,
+            ),
             const SizedBox(height: 15),
-            _buildNutrientBar('碳水化合物 (Carbs)', Color.fromARGB(255, 132, 202, 206), carbPercent),
+            _buildNutrientBar(
+              '碳水化合物 (Carbs)',
+              Color.fromARGB(255, 132, 202, 206),
+              carbPercent,
+            ),
             const SizedBox(height: 15),
-            _buildNutrientBar('脂肪 (Fat)', Color.fromARGB(255, 245, 190, 118), fatPercent),
+            _buildNutrientBar(
+              '脂肪 (Fat)',
+              Color.fromARGB(255, 245, 190, 118),
+              fatPercent,
+            ),
           ],
         ),
       ),
@@ -1011,7 +1025,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // 單一食物項目
   Widget _buildFoodItem(BuildContext context, FoodItem item) {
-    print("檢查圖片資料：[${item.imagePath}]");
+    // print("檢查圖片資料：[${item.imagePath}]");
 
     // 解碼 Base64 圖片（如果存在）
     Uint8List? imageBytes;
@@ -1072,8 +1086,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         child: Row(
           children: [
             // 如果 mealType 有值 (且不是空字串)，就顯示 Icon
-            if (item.mealType.isNotEmpty) 
-              _getMealIcon(item.mealType),
+            if (item.mealType.isNotEmpty) _getMealIcon(item.mealType),
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Container(
@@ -1162,8 +1175,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       ),
     );
   }
-
-  
 
   // 圖片佔位符
   Widget _buildImagePlaceholder() {
@@ -1282,7 +1293,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _calculateTotals(); // 呼叫計算函式，填入初始總和
 
     // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
-    if (widget.item.mealType.isNotEmpty && _mealOptions.contains(widget.item.mealType)) {
+    if (widget.item.mealType.isNotEmpty &&
+        _mealOptions.contains(widget.item.mealType)) {
       _selectedMealType = widget.item.mealType;
     }
   }
@@ -1329,7 +1341,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             ],
             Text(
               label,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5),
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 11.5,
+              ),
             ),
           ],
         ),
@@ -1368,7 +1383,9 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     // 根據是否刪除，決定顏色與透明度
     final bool isDeleted = ingredient.isDeleted;
     final Color textColor = isDeleted ? Colors.grey[400]! : Colors.black87;
-    final Color subTextColor = isDeleted ? Colors.grey[300]! : Colors.grey[600]!;
+    final Color subTextColor = isDeleted
+        ? Colors.grey[300]!
+        : Colors.grey[600]!;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -1389,7 +1406,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded( 
+                Expanded(
                   child: Text(
                     ingredient.name,
                     style: TextStyle(
@@ -1405,8 +1422,12 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   constraints: const BoxConstraints(),
                   // 切換圖示：刪除狀態顯示 + (加回來)，正常狀態顯示 - (刪除)
                   icon: Icon(
-                    isDeleted ? Icons.add_circle_outline : Icons.remove_circle_outline,
-                    color: isDeleted ? Colors.teal : Colors.red[300], // 刪除時變綠色(加回)，平時紅色
+                    isDeleted
+                        ? Icons.add_circle_outline
+                        : Icons.remove_circle_outline,
+                    color: isDeleted
+                        ? Colors.teal
+                        : Colors.red[300], // 刪除時變綠色(加回)，平時紅色
                     size: 24, // 稍微加大一點點比較好按
                   ),
                   onPressed: () {
@@ -1424,7 +1445,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                           _ingredientsToDelete.remove(ingredient.id!);
                         }
                       }
-                      
+
                       // 3. 重新計算總數 (_calculateTotals 會自動過濾掉 isDeleted 的項目)
                       _calculateTotals();
                     });
@@ -1447,11 +1468,23 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  _buildMacroInfo(Icons.circle, Color.fromARGB(255, 117, 181, 233), ingredient.protein),
+                  _buildMacroInfo(
+                    Icons.circle,
+                    Color.fromARGB(255, 117, 181, 233),
+                    ingredient.protein,
+                  ),
                   const SizedBox(width: 16),
-                  _buildMacroInfo(Icons.circle, Color.fromARGB(255, 132, 202, 206), ingredient.carbs),
+                  _buildMacroInfo(
+                    Icons.circle,
+                    Color.fromARGB(255, 132, 202, 206),
+                    ingredient.carbs,
+                  ),
                   const SizedBox(width: 16),
-                  _buildMacroInfo(Icons.circle, Color.fromARGB(255, 245, 190, 118), ingredient.fat),
+                  _buildMacroInfo(
+                    Icons.circle,
+                    Color.fromARGB(255, 245, 190, 118),
+                    ingredient.fat,
+                  ),
                 ],
               ),
             ),
@@ -1601,11 +1634,13 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                         const SizedBox(width: 4),
                         Text(
                           "${widget.selectedDate.year}/${widget.selectedDate.month.toString().padLeft(2, '0')}/${widget.selectedDate.day.toString().padLeft(2, '0')}",
-                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
                         ),
 
                         const SizedBox(width: 12), // 日期和選單中間的間距
-
                         // B. 下拉選單部分
                         Container(
                           height: 30, // 高度稍微調小一點，讓它跟日期看起來比較協調
@@ -1620,7 +1655,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                               value: _selectedMealType,
                               hint: Text(
                                 '選擇時段',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
                               ),
                               icon: const Icon(Icons.arrow_drop_down, size: 18),
                               isDense: true, // 讓選單緊湊
@@ -1634,13 +1672,14 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                                   _selectedMealType = newValue;
                                 });
                               },
-                              items: _mealOptions
-                                  .map<DropdownMenuItem<String>>((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
+                              items: _mealOptions.map<DropdownMenuItem<String>>(
+                                (String value) {
+                                  return DropdownMenuItem<String>(
+                                    value: value,
+                                    child: Text(value),
+                                  );
+                                },
+                              ).toList(),
                             ),
                           ),
                         ),
@@ -1680,7 +1719,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                 child: _buildLabeledTextField(
                   '蛋白質(g)',
                   _proteinController,
-                  enabled: false,  
+                  enabled: false,
                   dotColor: const Color.fromARGB(255, 117, 181, 233),
                 ),
               ),
