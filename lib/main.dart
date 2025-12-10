@@ -67,6 +67,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.theme,
       initialRoute: '/',
       routes: appRoutes,
+      debugShowCheckedModeBanner: false, // 隱藏右上角的DEBUG標籤
     );
   }
 }

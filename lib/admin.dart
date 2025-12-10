@@ -385,13 +385,22 @@ class _AdminPageState extends State<AdminPage> {
             // 固定：登出按鈕（不會捲動，貼在底部）
             TextButton.icon(
               onPressed: () async {
-                await FirebaseAuth.instance.signOut();
-                if (mounted) {
-                  Navigator.pushNamedAndRemoveUntil(
+                try {
+                  // 嘗試登出 Firebase
+                  await FirebaseAuth.instance.signOut();
+                  setState(() {isAdmin = false;});
+                  if (mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      "/auth",
+                      (_) => false,
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(
                     context,
-                    "/login",
-                    (_) => false,
-                  );
+                  ).showSnackBar(SnackBar(content: Text('登出失敗：$e')));
+                  print('登出失敗：$e');
                 }
               },
               icon: const Icon(Icons.logout),
@@ -399,7 +408,7 @@ class _AdminPageState extends State<AdminPage> {
               style: TextButton.styleFrom(foregroundColor: Colors.white),
             ),
           ],
-        ),
+        ), 
       ),
     );
   }

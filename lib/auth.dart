@@ -5,29 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 import 'package:http/http.dart' as http;
 
-//final user = FirebaseAuth.instance.currentUser;
-/*
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Firebase Auth Demo',
-      //theme: ThemeData(primarySwatch: Colors.blue),
-      home: const AuthPage(),
-    );
-  }
-}
-*/
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
 
