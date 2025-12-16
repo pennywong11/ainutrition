@@ -86,6 +86,32 @@ def _extract_token(authorization: str) -> str:
     except:
         raise HTTPException(status_code=401, detail="Invalid Authorization header")
 
+@router.get("/get_users_paginated")
+async def list_users_paginated(
+    page_size: int = 20,
+    page_token: str = None,
+    user=Depends(admin_required)
+):
+    """
+    - 分頁列出使用者
+    """
+    try:
+        page = auth.list_users(page_size=page_size, page_token=page_token)
+        users = []
+        for u in page.users:
+            users.append({
+                "uid": u.uid,
+                "email": u.email,
+                "admin": u.custom_claims.get("admin") if u.custom_claims else False,
+            })
+
+        return {
+            "users": users,
+            "next_page_token": page.next_page_token,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list users: {e}")
+
 @router.get("/get_users")
 async def list_all_users(user=Depends(admin_required)):
     """
@@ -206,3 +232,24 @@ async def delete_user(uid: str, user=Depends(admin_required)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {e}")
     
+@router.delete("/delete_users")
+async def delete_users(body: dict, user=Depends(admin_required)):
+    """
+    body = {"uids": ["uid1", "uid2", "uid3"]}
+    """
+    uids = body.get("uids", [])
+
+    if not isinstance(uids, list) or len(uids) == 0:
+        return {"error": "uids must be a non-empty list"}
+
+    # Firebase — 一次最多 1000 UID
+    result = auth.delete_users(uids)
+
+    return {
+        "success_count": result.success_count,
+        "failure_count": result.failure_count,
+        "errors": [
+            {"index": err.index, "reason": err.reason}
+            for err in result.errors
+        ],
+    }
