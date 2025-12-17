@@ -679,13 +679,22 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     if (_analysisResult == null || _imageBytes == null) return;
 
+    // 檢查是否有選取任何食材
+    final hasSelectedItems = _analysisResult!.ingredients.any(
+      (i) => i.isSelected,
+    );
+    if (!hasSelectedItems) {
+      _showSnackBar('請至少選取一項食材才能儲存');
+      return;
+    }
+
     setState(() => _isAnalyzing = true);
 
     try {
       String base64Image = await _encodeImageInBackground(_imageBytes!);
 
       if (base64Image.length > 1048576) {
-        throw "圖片壓縮後仍然過大 (超過1MB)，請嘗試重拍更簡單的畫面";
+        throw "圖片壓縮後仍然過大，請嘗試重拍更簡單的畫面";
       }
 
       final recordRef = FirebaseFirestore.instance
@@ -718,7 +727,7 @@ class _DashboardPageState extends State<DashboardPage> {
           DocumentReference ingredientDoc = recordRef
               .collection('ingredients')
               .doc();
-          // 注意：Ingredient.toJson() 已經內建了四捨五入邏輯
+          // Ingredient.toJson() 已經內建了四捨五入邏輯
           batch.set(ingredientDoc, ingredient.toJson());
         }
       }
@@ -1167,14 +1176,6 @@ class _DashboardPageState extends State<DashboardPage> {
                                 fontSize: isMobile ? 14 : 16,
                               ),
                             ),
-                            //  暫時備註掉：顯示資料庫驗證標章
-                            // if (ingredient.isFromDatabase) ...[
-                            //   const SizedBox(width: 4),
-                            //   Icon(Icons.check_circle,
-                            //     size: 14,
-                            //     color: Colors.green[400]
-                            //   )
-                            // ]
                           ],
                         ),
                         Text(
