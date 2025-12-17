@@ -1158,6 +1158,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _remarksController = TextEditingController(text: widget.item.remark);
     // 透過map和copy()產生全新的食材列表
     _ingredients = widget.item.ingredients.map((e) => e.copy()).toList();
+    _calculateTotals();
     // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
     if (widget.item.mealType.isNotEmpty &&
         _mealOptions.contains(widget.item.mealType)) {
