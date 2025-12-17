@@ -158,6 +158,57 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // 電子郵件驗證
+  void _confirmEmailVerification() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null || currentUser.email == null) return;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          content: Text("系統將寄出驗證信件至：\n${currentUser.email}\n\n是否繼續？"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("取消"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("確定"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == true) {
+      _sendEmailVerification();
+    }
+  }
+
+  void _sendEmailVerification() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser?.email == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("無法取得使用者 Email")));
+      return;
+    }
+
+    try {
+      await currentUser!.sendEmailVerification();
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("已寄出驗證信至：${currentUser.email}")));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
+    }
+  }
 
   // 修改密碼
   void _confirmResetPassword() async {
@@ -262,6 +313,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 builder: (context, snapshot) {
                   final user = snapshot.data;
                   final isLoggedIn = user != null && user.email != null;
+                  final isVertified = isLoggedIn && user.emailVerified;
 
                   return Container(
                     width: double.infinity,
@@ -302,7 +354,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              if (isLoggedIn)
+                              if (isVertified)
                                 GestureDetector(
                                   onTap: _confirmResetPassword,
                                   child: Text(
@@ -310,6 +362,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                     style: TextStyle(
                                       color: cs.primary,
                                       fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              if (isLoggedIn && !isVertified)
+                                GestureDetector(
+                                  onTap: _confirmEmailVerification,
+                                  child: Text(
+                                    '> 尚未完成電子郵件驗證，請檢查您的信箱，或點擊此處重新寄送驗證信',
+                                    style: TextStyle(
+                                      color: cs.primary,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
