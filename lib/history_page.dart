@@ -66,6 +66,21 @@ class Ingredient {
     required this.protein,
     required this.fat,
   });
+
+  Ingredient copy() {
+    var newIngredient = Ingredient(
+      id: this.id,
+      name: this.name,
+      grams: this.grams,
+      calories: this.calories,
+      carbs: this.carbs,
+      protein: this.protein,
+      fat: this.fat,
+    );
+    // 複製目前的刪除狀態 (通常初始是 false)
+    newIngredient.isDeleted = this.isDeleted;
+    return newIngredient;
+  }
 }
 
 // 用來暫存"今日總營養素"的小工具類別
@@ -1141,9 +1156,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _carbController = TextEditingController();
     _fatController = TextEditingController();
     _remarksController = TextEditingController(text: widget.item.remark);
-
-    _ingredients = List.from(widget.item.ingredients);
-    _calculateTotals(); // 呼叫計算函式，填入初始總和
+    // 透過map和copy()產生全新的食材列表
+    _ingredients = widget.item.ingredients.map((e) => e.copy()).toList();
     // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
     if (widget.item.mealType.isNotEmpty &&
         _mealOptions.contains(widget.item.mealType)) {
