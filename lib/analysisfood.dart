@@ -294,15 +294,17 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // 速度優化 1：調整圖片壓縮參數 (maxWidth: 600, quality: 50)
+  // 這會大幅減少上傳時間，解決 "分析要20秒" 的問題
   Future<void> _takePhotoWithCamera() async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 70,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 50,
       );
       if (image != null) await _showImagePreview(image);
     } catch (e) {
@@ -315,9 +317,9 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 70,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 50,
       );
       if (image != null) _handleSelectedImage(image);
     } catch (e) {
@@ -330,9 +332,9 @@ class _DashboardPageState extends State<DashboardPage> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 70,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 50,
       );
       if (image != null) _handleSelectedImage(image);
     } catch (e) {
@@ -474,11 +476,11 @@ class _DashboardPageState extends State<DashboardPage> {
       
          - **情境 A [修飾模式]**：圖片清晰且是食物。
            -> 核心原則：**圖片是主角，文字是修飾。**
-           -> 行動：保留圖片中看到的所有食材。若使用者文字提到「半飯」、「少油」、「去皮」等，請**調整對應食材的重量或熱量**，但**絕對不能**因此忽略圖片中的其他主食或配菜。
-           -> 範例：圖是豬排咖哩飯，文字寫「半飯」。
-              * 錯誤行為：只輸出白飯。
-              * 正確行為：輸出豬排、咖哩、蔬菜，並輸出白飯(但重量減半)。
-           -> 輸出：is_food: true, dish_name: 辨識結果(加上文字備註), summary: 依據圖片與文字調整後的總結。
+           -> 行動：保留圖片中看到的所有食材。若使用者文字提到「半飯」、「少油」、「去皮」等，請**調整對應食材的重量或熱量**。
+           -> **【重要】強制拆解原則**：若圖片中食材是「分開擺放」的（例如便當、自助餐），即使使用者文字輸入「炒飯」、「燴飯」等混合料理名稱，也請**優先依據圖片視覺，將飯、肉、菜分開列出**，除非圖片本身真的是混合料理。
+           -> 範例：圖是「排骨便當（飯、菜分開）」，文字寫「排骨炒飯」。
+              * 正確行為：忽略「炒飯」文字定義，輸出「白飯」、「炸排骨」、「炒青菜」。
+           -> 輸出：is_food: true, dish_name: 辨識結果, summary: 總結。
            
          - **情境 B [補救情境]**：圖片模糊/全黑/無法辨識，但使用者有輸入描述。
            -> 行動：完全信賴使用者描述，提供標準估算值。
@@ -493,13 +495,14 @@ class _DashboardPageState extends State<DashboardPage> {
            -> 輸出：is_food: false, error_msg: "無法辨識為食物，請補充文字說明。"
 
       【嚴格輸出規範】：
-      1. **summary (營養總結)**：請非常精簡，**絕對不要超過 30 個中文字**。直接講重點，不要廢話。
-      2. **ingredients (食材名稱)**：
-         - name: 請**只寫最核心的食材名**，去除所有冗言贅詞、形容詞或補充說明。
-           * 錯誤範例："番茄醬或其他調味"、"新鮮的羅美生菜"
-           * 正確範例："番茄醬"、"羅美生菜"
-         - **search_terms**: [重要] 請提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。越標準越好。例如看到滷蛋，給 ["滷蛋", "雞蛋"]。
-         - **calories, protein, carbs, fat**: [重要] 請針對你預估的重量，提供 AI 估算的總營養素數值，作為查表失敗時的備用數據。
+      1. **dish_name (餐點名稱)**：請**簡潔扼要** (建議 10 字內)。
+         - 錯誤：營養豐富的香煎雞腿排佐時蔬便當
+         - 正確：香煎雞腿便當
+      2. **summary (營養總結)**：請非常精簡，**絕對不要超過 35 個中文字**。直接講重點，不要廢話。
+      3. **ingredients (食材名稱)**：
+         - name: 請**只寫最核心的食材名**，去除所有冗言贅詞。
+         - **search_terms**: [重要] 請提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。
+         - **calories**: 提供 AI 估算的總營養素數值。
 
       【回傳格式 (JSON Only)】：
       {
@@ -560,29 +563,26 @@ class _DashboardPageState extends State<DashboardPage> {
 
           List<Ingredient> ingredients = [];
           if (data['ingredients'] != null) {
-            // 核心邏輯：遍歷每個食材，先查表，查不到才用 AI 數據
             for (var item in data['ingredients']) {
               String name = item['name'] ?? '未知食材';
               double weight = (item['weight'] ?? 0).toDouble();
 
-              // 1. 先取得 AI 估算的備用數據 (AI 給的是該重量的總值)
               double calories = (item['calories'] ?? 0).toDouble();
               double protein = (item['protein'] ?? 0).toDouble();
               double carbs = (item['carbs'] ?? 0).toDouble();
               double fat = (item['fat'] ?? 0).toDouble();
               bool isVerified = false;
 
-              // 2. 準備搜尋關鍵字
               List<String> searchTerms = [];
               if (item['search_terms'] != null) {
                 searchTerms = List<String>.from(item['search_terms']);
               }
               searchTerms.insert(0, name);
 
-              // 3. 查表 (Hybrid Logic with Smart Sorting)
               List<FoodItem> matches = [];
               for (var term in searchTerms) {
-                var currentMatches = _nutritionService.searchFood(term);
+                // 這裡使用 await，無論是 SQLite 還是 CSV 都能通用
+                var currentMatches = await _nutritionService.searchFood(term);
 
                 if (currentMatches.isNotEmpty) {
                   // 智慧排序邏輯
@@ -602,9 +602,7 @@ class _DashboardPageState extends State<DashboardPage> {
               if (matches.isNotEmpty) {
                 final dbFood = matches.first;
 
-                // 計算數值 (保留原始 double 精度，存檔時再四捨五入)
-                // 衛福部資料是「每 100g」的含量
-                // 公式：總量 = (每100g數值) * (重量 / 100)
+                // 計算數值
                 double ratio = weight / 100.0;
 
                 calories = dbFood.calories * ratio;
@@ -614,9 +612,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                 isVerified = true;
 
-                print(
-                  "✅ [查表成功] $name 搜尋 '${searchTerms.first}' -> 對應到: ${dbFood.name} (ID: ${dbFood.id})",
-                );
+                print("✅ [查表成功] $name -> ${dbFood.name}");
               } else {
                 print("⚠️ [查無資料] $name 使用 AI 估算值");
               }
@@ -679,7 +675,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     if (_analysisResult == null || _imageBytes == null) return;
 
-    // 檢查是否有選取任何食材
+    // 防呆機制：檢查是否有選取任何食材
     final hasSelectedItems = _analysisResult!.ingredients.any(
       (i) => i.isSelected,
     );
@@ -705,7 +701,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
-      // 存入總數據時，四捨五入至小數點第二位
       double round2(double val) => double.parse(val.toStringAsFixed(2));
 
       final recordData = {
@@ -727,7 +722,6 @@ class _DashboardPageState extends State<DashboardPage> {
           DocumentReference ingredientDoc = recordRef
               .collection('ingredients')
               .doc();
-          // Ingredient.toJson() 已經內建了四捨五入邏輯
           batch.set(ingredientDoc, ingredient.toJson());
         }
       }
@@ -1008,7 +1002,7 @@ class _DashboardPageState extends State<DashboardPage> {
         if (_imageBytes != null && _analysisResult == null) ...[
           TextField(
             controller: _promptController,
-            enabled: !_isAnalyzing, // 新增：分析中鎖定輸入框
+            enabled: !_isAnalyzing, // 分析中鎖定輸入框
             decoration: InputDecoration(
               hintText: '補充細節能讓估算更精準 (例：去皮、半飯、無糖...)',
               hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
@@ -1033,7 +1027,7 @@ class _DashboardPageState extends State<DashboardPage> {
             if (_imageBytes != null)
               Expanded(
                 child: TextButton(
-                  onPressed: _isAnalyzing ? null : _resetAll,
+                  onPressed: _isAnalyzing ? null : _resetAll, // 分析中禁用重選
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     foregroundColor: Colors.grey,
@@ -1136,11 +1130,6 @@ class _DashboardPageState extends State<DashboardPage> {
     return Column(
       children: _analysisResult!.ingredients.map((ingredient) {
         final opacity = ingredient.isSelected ? 1.0 : 0.5;
-        // 現在是統一邊框顏色，不區分資料來源
-        // 若有查到表，邊框顯示不同顏色 (選用) -> 改回原樣，不區分顏色
-        // final borderColor = ingredient.isFromDatabase
-        //    ? Colors.green.withOpacity(0.3)
-        //    : const Color.fromARGB(255, 132, 202, 206).withOpacity(0.1);
         final borderColor = const Color.fromARGB(
           255,
           132,
