@@ -15,6 +15,7 @@ class AdminPage extends StatefulWidget {
 class _AdminPageState extends State<AdminPage> {
   bool? isAdmin;
   String? adminEmail;
+  String? adminUid;
 
   List<dynamic> users = [];
   List<dynamic> filteredUsers = [];
@@ -29,7 +30,7 @@ class _AdminPageState extends State<AdminPage> {
   );
 
   // 搜尋 / 篩選
-  final TextEditingController searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   bool filterAdmin = false;
   bool filterNormal = false;
   bool filterAnonymous = false;
@@ -46,6 +47,13 @@ class _AdminPageState extends State<AdminPage> {
     checkAdmin();
   }
 
+  // 釋放資源
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> checkAdmin() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -54,6 +62,7 @@ class _AdminPageState extends State<AdminPage> {
     }
 
     adminEmail = user.email;
+    adminUid = user.uid;
     final token = await user.getIdToken(true);
 
     final resp = await http.get(
@@ -113,7 +122,7 @@ class _AdminPageState extends State<AdminPage> {
 
   // OR 篩選邏輯
   void _applyFilters() {
-    final keyword = searchController.text.trim().toLowerCase();
+    final keyword = _searchController.text.trim().toLowerCase();
 
     filteredUsers = users.where((u) {
       final email = (u["email"] ?? "").toLowerCase();
@@ -359,11 +368,22 @@ class _AdminPageState extends State<AdminPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         TextField(
-          controller: searchController,
+          controller: _searchController,
           onChanged: (_) => _applyFilters(),
           decoration: InputDecoration(
             hintText: "搜尋 Email / UID",
             prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searchController.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: "清除搜尋",
+                  onPressed: () {
+                    _searchController.clear();
+                    FocusScope.of(context).unfocus(); // 收鍵盤（可留可刪）
+                    _applyFilters();
+                  },
+                ),
             filled: true,
             fillColor: cs.surfaceVariant,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -499,13 +519,15 @@ class _AdminPageState extends State<AdminPage> {
                   children: [
                     Checkbox(
                       value: selectedUids.contains(uid),
-                      onChanged: (v) {
-                        setState(() {
-                          v == true
-                              ? selectedUids.add(uid)
-                              : selectedUids.remove(uid);
-                        });
-                      },
+                      onChanged: uid == adminUid
+                          ? null // ⭐ 自己：不能勾
+                          : (v) {
+                              setState(() {
+                                v == true
+                                    ? selectedUids.add(uid)
+                                    : selectedUids.remove(uid);
+                              });
+                            },
                     ),
                     const SizedBox(width: 12),
                     CircleAvatar(
