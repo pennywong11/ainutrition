@@ -10,6 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  tflite_flutter: ^0.11.0  # 跑模型用
+  image: ^4.1.7            # 處理圖片用 (縮放、轉檔)
   cupertino_icons: ^1.0.8
   firebase_core: ^4.2.1
   cloud_firestore: ^6.1.0
@@ -42,3 +44,4 @@ flutter:
   assets:
     - .env
     - assets/data/nutrition.csv
+    - assets/nutrition5k_real.tflite
