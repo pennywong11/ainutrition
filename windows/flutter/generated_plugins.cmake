@@ -8,12 +8,18 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_auth
   firebase_core
   permission_handler_windows
+<<<<<<< HEAD
   share_plus
   url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   tflite_flutter
+=======
+)
+
+list(APPEND FLUTTER_FFI_PLUGIN_LIST
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

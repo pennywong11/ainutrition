@@ -37,7 +37,12 @@ class _AdminPageState extends State<AdminPage> {
   // 批次選取
   final Set<String> selectedUids = {};
   bool get isAllSelected =>
+<<<<<<< HEAD
       filteredUsers.isNotEmpty && selectedUids.length == filteredUsers.length;
+=======
+      filteredUsers.isNotEmpty &&
+      selectedUids.length == filteredUsers.length;
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
 
   // 初始化並檢查是否為管理員
   @override
@@ -252,10 +257,14 @@ class _AdminPageState extends State<AdminPage> {
         title: const Text("確認刪除"),
         content: Text("確定要刪除使用者：$uid ？"),
         actions: [
+<<<<<<< HEAD
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text("取消"),
           ),
+=======
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("取消")),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(backgroundColor: Colors.red),
@@ -289,10 +298,14 @@ class _AdminPageState extends State<AdminPage> {
       builder: (_) => AlertDialog(
         content: Text("確定要刪除 ${selectedUids.length} 位使用者？"),
         actions: [
+<<<<<<< HEAD
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text("取消"),
           ),
+=======
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("取消")),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(backgroundColor: Colors.red),
@@ -320,12 +333,21 @@ class _AdminPageState extends State<AdminPage> {
       selectedUids.clear();
       _getUsers();
     } else {
+<<<<<<< HEAD
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("批次刪除失敗：${resp.body}")));
     }
   }
 
+=======
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("批次刪除失敗：${resp.body}")));
+    }
+  }
+
+
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
   @override
   Widget build(BuildContext context) {
     if (isAdmin == null) {
@@ -379,6 +401,7 @@ class _AdminPageState extends State<AdminPage> {
             hintText: "搜尋 Email / UID",
             prefixIcon: const Icon(Icons.search),
             suffixIcon: _searchController.text.isEmpty
+<<<<<<< HEAD
                 ? null
                 : IconButton(
                     icon: const Icon(Icons.close),
@@ -389,6 +412,18 @@ class _AdminPageState extends State<AdminPage> {
                       _applyFilters();
                     },
                   ),
+=======
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: "清除搜尋",
+                  onPressed: () {
+                    _searchController.clear();
+                    FocusScope.of(context).unfocus(); // 收鍵盤（可留可刪）
+                    _applyFilters();
+                  },
+                ),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
             filled: true,
             fillColor: cs.surfaceVariant,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -418,10 +453,14 @@ class _AdminPageState extends State<AdminPage> {
             ),
             if (selectedUids.isNotEmpty)
               Container(
+<<<<<<< HEAD
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
                 ),
+=======
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                 decoration: BoxDecoration(
                   color: cs.surfaceVariant,
                   borderRadius: BorderRadius.circular(24),
@@ -555,19 +594,27 @@ class _AdminPageState extends State<AdminPage> {
                               Flexible(
                                 child: Text(
                                   u["email"] ?? "匿名用戶",
+<<<<<<< HEAD
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
+=======
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               if (u["admin"] == true)
+<<<<<<< HEAD
                                 const Icon(
                                   Icons.star,
                                   color: Colors.orange,
                                   size: 18,
                                 ),
+=======
+                                const Icon(Icons.star, color: Colors.orange, size: 18,), 
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                             ],
                           ),
                           const SizedBox(height: 2),
@@ -596,8 +643,13 @@ class _AdminPageState extends State<AdminPage> {
                     child: isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : detail == null
+<<<<<<< HEAD
                         ? const Text("載入失敗")
                         : _buildUserDetail(detail),
+=======
+                            ? const Text("載入失敗")
+                            : _buildUserDetail(detail),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                   ),
                 ),
               ],
@@ -613,16 +665,35 @@ class _AdminPageState extends State<AdminPage> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
+<<<<<<< HEAD
       child: Column(
+=======
+      child:Column(
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text("Email 驗證：${d["email_verified"]}"),
           Text("管理員：${d["admin"]}"),
           Text(
+<<<<<<< HEAD
             "註冊時間：${meta["creation_time"] != null ? DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(meta["creation_time"])) : "未知"}",
           ),
           Text(
             "最後登入：${meta["last_sign_in_time"] != null ? DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(meta["last_sign_in_time"])) : "未知"}",
+=======
+            "註冊時間：${meta["creation_time"] != null
+                ? DateFormat('yyyy/MM/dd').format(
+                    DateTime.fromMillisecondsSinceEpoch(meta["creation_time"]),
+                  )
+                : "未知"}",
+          ),
+          Text(
+            "最後登入：${meta["last_sign_in_time"] != null
+                ? DateFormat('yyyy/MM/dd').format(
+                    DateTime.fromMillisecondsSinceEpoch(meta["last_sign_in_time"]),
+                  )
+                : "未知"}",
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
           ),
         ],
       ),
@@ -719,9 +790,13 @@ class _AdminPageState extends State<AdminPage> {
                 try {
                   // 嘗試登出 Firebase
                   await FirebaseAuth.instance.signOut();
+<<<<<<< HEAD
                   setState(() {
                     isAdmin = false;
                   });
+=======
+                  setState(() {isAdmin = false;});
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                   if (mounted) {
                     Navigator.pushNamedAndRemoveUntil(
                       context,
@@ -741,7 +816,11 @@ class _AdminPageState extends State<AdminPage> {
               style: TextButton.styleFrom(foregroundColor: Colors.white),
             ),
           ],
+<<<<<<< HEAD
         ),
+=======
+        ), 
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
       ),
     );
   }

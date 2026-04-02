@@ -31,7 +31,11 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _setupUserDoc();
   }
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
   Future<void> _setupUserDoc() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
@@ -117,9 +121,15 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) {
         return AlertDialog(
           content: const Text(
+<<<<<<< HEAD
             "確定要註銷帳號？此操作無法復原！",
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
+=======
+            "確定要註銷帳號？此操作無法復原！", 
+            style: TextStyle(fontWeight: FontWeight.bold)
+            ),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -134,7 +144,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 "確定",
                 style: TextStyle(
                   color: Color.fromARGB(255, 233, 98, 88),
+<<<<<<< HEAD
                   fontWeight: FontWeight.bold,
+=======
+                  fontWeight: FontWeight.bold
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                 ),
               ),
             ),
@@ -158,6 +172,61 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // 電子郵件驗證
+  void _confirmEmailVerification() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null || currentUser.email == null) return;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          content: Text("系統將寄出驗證信件至：\n${currentUser.email}\n\n是否繼續？"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("取消"),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("確定"),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == true) {
+      _sendEmailVerification();
+    }
+  }
+
+  void _sendEmailVerification() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser?.email == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("無法取得使用者 Email")));
+      return;
+    }
+
+    try {
+      await currentUser!.sendEmailVerification();
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("已寄出驗證信至：${currentUser.email}")));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
+    }
+  }
+
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
   // 修改密碼
   void _confirmResetPassword() async {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -261,6 +330,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 builder: (context, snapshot) {
                   final user = snapshot.data;
                   final isLoggedIn = user != null && user.email != null;
+<<<<<<< HEAD
+=======
+                  final isVertified = isLoggedIn && user.emailVerified;
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
 
                   return Container(
                     width: double.infinity,
@@ -301,7 +374,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                               ),
                               const SizedBox(height: 6),
+<<<<<<< HEAD
                               if (isLoggedIn)
+=======
+                              if (isVertified)
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                                 GestureDetector(
                                   onTap: _confirmResetPassword,
                                   child: Text(
@@ -312,6 +389,20 @@ class _SettingsPageState extends State<SettingsPage> {
                                     ),
                                   ),
                                 ),
+<<<<<<< HEAD
+=======
+                              if (isLoggedIn && !isVertified)
+                                GestureDetector(
+                                  onTap: _confirmEmailVerification,
+                                  child: Text(
+                                    '> 尚未完成電子郵件驗證，請檢查您的信箱，或點擊此處重新寄送驗證信',
+                                    style: TextStyle(
+                                      color: cs.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                               if (!isLoggedIn)
                                 GestureDetector(
                                   onTap: () {
@@ -451,8 +542,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 stream: FirebaseAuth.instance.authStateChanges(),
                 builder: (context, snapshot) {
                   final user = snapshot.data;
+<<<<<<< HEAD
                   if (user == null || user.isAnonymous)
                     return const SizedBox.shrink();
+=======
+                  if (user == null || user.isAnonymous) return const SizedBox.shrink();
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
 
                   return Column(
                     children: [
@@ -471,15 +566,23 @@ class _SettingsPageState extends State<SettingsPage> {
                               onPressed: deleteAccount,
                               child: const Text(
                                 '註銷帳號',
+<<<<<<< HEAD
                                 style: TextStyle(
                                   color: Color.fromARGB(255, 233, 98, 88),
                                 ),
+=======
+                                style: TextStyle(color: Color.fromARGB(255, 233, 98, 88)),
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                               ),
                             ),
                           ],
                         ),
                       ),
+<<<<<<< HEAD
 
+=======
+                      
+>>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
                       const SizedBox(height: 20),
                     ],
                   );
