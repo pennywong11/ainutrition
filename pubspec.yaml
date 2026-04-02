@@ -10,11 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-<<<<<<< HEAD
   tflite_flutter: ^0.11.0  # 跑模型用
   image: ^4.1.7            # 處理圖片用 (縮放、轉檔)
-=======
->>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
   cupertino_icons: ^1.0.8
   firebase_core: ^4.2.1
   cloud_firestore: ^6.1.0
@@ -34,10 +31,7 @@ dependencies:
   http: ^1.1.0
   js: ^0.6.6
   csv: ^6.0.0
-<<<<<<< HEAD
   share_plus: ^12.0.1
-=======
->>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
 
 dev_dependencies:
   flutter_test:
@@ -50,9 +44,5 @@ flutter:
   uses-material-design: true
   assets:
     - .env
-<<<<<<< HEAD
     - assets/data/nutrition.csv
     - assets/nutrition5k_real.tflite
-=======
-    - assets/data/nutrition.csv
->>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
