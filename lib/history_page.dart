@@ -7,10 +7,12 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料�
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
+// 通知欄
+import 'notifications/notification_handler.dart';
+import 'notifications/notification_ui.dart';
+import 'notifications/notification_bell.dart';
 
-// ----------------------------------------------
 // 資料模型區(Models)：定義資料的樣子
-// ----------------------------------------------
 
 // 每個"食物"的資料結構
 class FoodItem {
@@ -460,6 +462,14 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 15.0),
+            child: NotificationBell(
+              onPressed: () {
+                NotificationUI.showTodayNotifications(context);
+              },
+            ),
+          ),
           // 新增：週報月報按鈕
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
