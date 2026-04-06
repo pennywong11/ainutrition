@@ -8,6 +8,7 @@ from firebase_admin import auth, credentials
 from firebase_admin import firestore_async
 
 from app.admin import router as admin_router
+from app.notifications import router as notifications_router
 #from app.routes.settings import router as settings_router
 
 #API_BASE_URL = os.getenv("API_BASE_URL")
@@ -32,6 +33,7 @@ app.add_middleware(
 # ↑↑↑部署前要改↑↑↑
 
 app.include_router(admin_router, prefix="/admin")  # include the user router under /users path
+app.include_router(notifications_router, prefix="/notifications")  # include the notifications router under /notifications path
 
 # app.include_router(settings_router, prefix="/settings")  
 # include the settings router under /settings path
