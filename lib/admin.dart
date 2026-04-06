@@ -37,8 +37,7 @@ class _AdminPageState extends State<AdminPage> {
   // 批次選取
   final Set<String> selectedUids = {};
   bool get isAllSelected =>
-      filteredUsers.isNotEmpty &&
-      selectedUids.length == filteredUsers.length;
+      filteredUsers.isNotEmpty && selectedUids.length == filteredUsers.length;
 
   // 初始化並檢查是否為管理員
   @override
@@ -253,7 +252,10 @@ class _AdminPageState extends State<AdminPage> {
         title: const Text("確認刪除"),
         content: Text("確定要刪除使用者：$uid ？"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("取消")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("取消"),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(backgroundColor: Colors.red),
@@ -287,7 +289,10 @@ class _AdminPageState extends State<AdminPage> {
       builder: (_) => AlertDialog(
         content: Text("確定要刪除 ${selectedUids.length} 位使用者？"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("取消")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("取消"),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(backgroundColor: Colors.red),
@@ -315,11 +320,11 @@ class _AdminPageState extends State<AdminPage> {
       selectedUids.clear();
       _getUsers();
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("批次刪除失敗：${resp.body}")));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("批次刪除失敗：${resp.body}")));
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -374,16 +379,16 @@ class _AdminPageState extends State<AdminPage> {
             hintText: "搜尋 Email / UID",
             prefixIcon: const Icon(Icons.search),
             suffixIcon: _searchController.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close),
-                  tooltip: "清除搜尋",
-                  onPressed: () {
-                    _searchController.clear();
-                    FocusScope.of(context).unfocus(); // 收鍵盤（可留可刪）
-                    _applyFilters();
-                  },
-                ),
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close),
+                    tooltip: "清除搜尋",
+                    onPressed: () {
+                      _searchController.clear();
+                      FocusScope.of(context).unfocus(); // 收鍵盤（可留可刪）
+                      _applyFilters();
+                    },
+                  ),
             filled: true,
             fillColor: cs.surfaceVariant,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -413,7 +418,10 @@ class _AdminPageState extends State<AdminPage> {
             ),
             if (selectedUids.isNotEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: cs.surfaceVariant,
                   borderRadius: BorderRadius.circular(24),
@@ -547,13 +555,19 @@ class _AdminPageState extends State<AdminPage> {
                               Flexible(
                                 child: Text(
                                   u["email"] ?? "匿名用戶",
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 8),
                               if (u["admin"] == true)
-                                const Icon(Icons.star, color: Colors.orange, size: 18,), 
+                                const Icon(
+                                  Icons.star,
+                                  color: Colors.orange,
+                                  size: 18,
+                                ),
                             ],
                           ),
                           const SizedBox(height: 2),
@@ -582,8 +596,8 @@ class _AdminPageState extends State<AdminPage> {
                     child: isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : detail == null
-                            ? const Text("載入失敗")
-                            : _buildUserDetail(detail),
+                        ? const Text("載入失敗")
+                        : _buildUserDetail(detail),
                   ),
                 ),
               ],
@@ -599,24 +613,16 @@ class _AdminPageState extends State<AdminPage> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
-      child:Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text("Email 驗證：${d["email_verified"]}"),
           Text("管理員：${d["admin"]}"),
           Text(
-            "註冊時間：${meta["creation_time"] != null
-                ? DateFormat('yyyy/MM/dd').format(
-                    DateTime.fromMillisecondsSinceEpoch(meta["creation_time"]),
-                  )
-                : "未知"}",
+            "註冊時間：${meta["creation_time"] != null ? DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(meta["creation_time"])) : "未知"}",
           ),
           Text(
-            "最後登入：${meta["last_sign_in_time"] != null
-                ? DateFormat('yyyy/MM/dd').format(
-                    DateTime.fromMillisecondsSinceEpoch(meta["last_sign_in_time"]),
-                  )
-                : "未知"}",
+            "最後登入：${meta["last_sign_in_time"] != null ? DateFormat('yyyy/MM/dd').format(DateTime.fromMillisecondsSinceEpoch(meta["last_sign_in_time"])) : "未知"}",
           ),
         ],
       ),
@@ -713,7 +719,9 @@ class _AdminPageState extends State<AdminPage> {
                 try {
                   // 嘗試登出 Firebase
                   await FirebaseAuth.instance.signOut();
-                  setState(() {isAdmin = false;});
+                  setState(() {
+                    isAdmin = false;
+                  });
                   if (mounted) {
                     Navigator.pushNamedAndRemoveUntil(
                       context,
@@ -733,7 +741,7 @@ class _AdminPageState extends State<AdminPage> {
               style: TextButton.styleFrom(foregroundColor: Colors.white),
             ),
           ],
-        ), 
+        ),
       ),
     );
   }

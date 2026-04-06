@@ -676,7 +676,6 @@ class _DashboardPageState extends State<DashboardPage> {
     if (_analysisResult == null || _imageBytes == null) return;
 
     // 防呆機制：檢查是否有選取任何食材
-
     final hasSelectedItems = _analysisResult!.ingredients.any(
       (i) => i.isSelected,
     );

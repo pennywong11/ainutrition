@@ -31,7 +31,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _setupUserDoc();
   }
-  
+
   Future<void> _setupUserDoc() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
@@ -117,9 +117,9 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) {
         return AlertDialog(
           content: const Text(
-            "確定要註銷帳號？此操作無法復原！", 
-            style: TextStyle(fontWeight: FontWeight.bold)
-            ),
+            "確定要註銷帳號？此操作無法復原！",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -134,7 +134,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 "確定",
                 style: TextStyle(
                   color: Color.fromARGB(255, 233, 98, 88),
-                  fontWeight: FontWeight.bold
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
@@ -515,7 +515,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 stream: FirebaseAuth.instance.authStateChanges(),
                 builder: (context, snapshot) {
                   final user = snapshot.data;
-                  if (user == null || user.isAnonymous) return const SizedBox.shrink();
+                  if (user == null || user.isAnonymous)
+                    return const SizedBox.shrink();
 
                   return Column(
                     children: [
@@ -534,13 +535,15 @@ class _SettingsPageState extends State<SettingsPage> {
                               onPressed: deleteAccount,
                               child: const Text(
                                 '註銷帳號',
-                                style: TextStyle(color: Color.fromARGB(255, 233, 98, 88)),
+                                style: TextStyle(
+                                  color: Color.fromARGB(255, 233, 98, 88),
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 20),
                     ],
                   );

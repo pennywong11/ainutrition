@@ -5,6 +5,7 @@ import 'analysisfood.dart';
 import 'auth.dart';
 import 'admin.dart';
 import 'settings.dart';
+import 'pages/family_settings_page.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
   '/': (context) => const NutritionHomePage(), // 主畫面
@@ -12,4 +13,5 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/settings': (context) => const SettingsPage(), // 設定頁
   '/admin': (context) => const AdminPage(), // 管理頁
   '/analysis': (context) => const DashboardPage(), // 分析頁
+  '/family_settings': (context) => const FamilySettingsPage(),
 };

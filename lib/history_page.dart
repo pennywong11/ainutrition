@@ -12,6 +12,9 @@ import 'notifications/notification_handler.dart';
 import 'notifications/notification_ui.dart';
 import 'notifications/notification_bell.dart';
 
+// 🟢 引入切換按鈕元件 (家庭共享功能)
+import '../widgets/family_switcher.dart';
+
 // 資料模型區(Models)：定義資料的樣子
 
 // 每個"食物"的資料結構
@@ -95,6 +98,7 @@ class _DailyTotals {
   double fat = 0;
 }
 
+// 報表數據結構
 class ReportData {
   final String period;
   final double totalCalories;
@@ -102,10 +106,10 @@ class ReportData {
   final double totalCarbs;
   final double totalFat;
   final int totalMeals;
-  final double totalWeight; 
+  final double totalWeight;
   final Map<String, double> dailyAverages;
   final List<MapEntry<DateTime, double>> topCalorieDays;
-  final String aiFeedback; // 新增這行
+  final String aiFeedback;
 
   ReportData({
     required this.period,
@@ -117,7 +121,7 @@ class ReportData {
     required this.totalWeight,
     required this.dailyAverages,
     required this.topCalorieDays,
-    required this.aiFeedback, // 新增這行
+    required this.aiFeedback,
   });
 }
 
@@ -133,6 +137,10 @@ class NutritionHomePage extends StatefulWidget {
 }
 
 class _NutritionHomePageState extends State<NutritionHomePage> {
+  // 🟢 變數：控制「現在看誰的資料」
+  String? _targetUid;
+  String _targetName = "我自己";
+
   // 狀態變數
   late DateTime _selectedDate;
   StreamSubscription? _foodSubscription;
@@ -147,7 +155,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   List<FoodItem> _foodList = [];
   bool _isLoading = true;
 
-  // 檢查使用者資料完整性
+  // 檢查使用者資料完整性 (檢查"自己"，因為目標是設定自己的BMR)
   Future<void> _checkUserDataStatus() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -159,7 +167,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
         if (doc.exists) {
           final data = doc.data();
-          bool isComplete = data != null &&
+          bool isComplete =
+              data != null &&
               data['gender'] != null &&
               data['age'] != null &&
               data['height'] != null &&
@@ -197,7 +206,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // --- 根據個人資料計算 BMR 與 TDEE ---
   void _calculatePersonalizedTargets(
-      String gender, int age, double height, double weight) {
+    String gender,
+    int age,
+    double height,
+    double weight,
+  ) {
     double bmr = 0;
     // 1. 計算 BMR (基礎代謝率)
     if (gender == '男性' || gender == '男' || gender.toLowerCase() == 'male') {
@@ -207,11 +220,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
 
     // 2. 計算 TDEE (個人每日總熱量需求)
-    // 這是 "個人化" 的部分，因為不同年齡體重算出來的 bmr 不同
     double tdee = bmr * 1.2;
 
     // 3. 設定營養素比例
-    // 蛋白質 12%, 脂肪 27%, 碳水 60%
     double proteinRatio = 0.12;
     double fatRatio = 0.27;
     double carbsRatio = 0.60;
@@ -219,12 +230,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     if (mounted) {
       setState(() {
         _targetCalories = tdee;
-        // 4. 計算各營養素的目標克數
-        // 蛋白質目標 (g) = (總熱量 * 12%) / 4
         _targetProtein = (_targetCalories * proteinRatio) / 4;
-        // 碳水目標 (g) = (總熱量 * 60%) / 4
         _targetCarbs = (_targetCalories * carbsRatio) / 4;
-        // 脂肪目標 (g) = (總熱量 * 27%) / 9
         _targetFat = (_targetCalories * fatRatio) / 9;
       });
     }
@@ -234,6 +241,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   void initState() {
     super.initState();
     _selectedDate = DateTime.now();
+
+    // 🟢 初始化目標 UID 為自己
+    _targetUid = FirebaseAuth.instance.currentUser?.uid;
 
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user == null) {
@@ -245,10 +255,17 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             _isGoalSet = false;
             _targetCalories = 2050;
             _isLoading = false;
+            _targetUid = null; // 清除目標 UID
+            _targetName = "我自己";
           });
         }
       } else {
         print("系統：偵測到使用者 ID: ${user.uid}，開始讀取資料...");
+        // 🟢 登入時，預設看自己
+        if (_targetUid == null) {
+          _targetUid = user.uid;
+          _targetName = "我自己";
+        }
         _listenToFirebaseData();
         _checkUserDataStatus();
       }
@@ -271,128 +288,156 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   void _listenToFirebaseData() {
     _foodSubscription?.cancel();
-    final currentUserUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUserUid == null) {
+
+    // 🟢 使用 _targetUid 決定要抓取誰的資料
+    final uidToFetch = _targetUid;
+
+    if (uidToFetch == null) {
       setState(() {
         _isLoading = false;
+        _foodList = [];
       });
       return;
     }
 
+    print("正在監聽資料，目標 UID: $uidToFetch (${_targetName})");
+
     final DateTime startOfDay = DateTime(
-      _selectedDate.year, _selectedDate.month, _selectedDate.day, 0, 0, 0);
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      0,
+      0,
+      0,
+    );
     final DateTime endOfDay = DateTime(
-      _selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59, 999);
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      23,
+      59,
+      59,
+      999,
+    );
 
     _foodSubscription = FirebaseFirestore.instance
         .collection('users')
-        .doc(currentUserUid)
+        .doc(uidToFetch)
         .collection('analysis_records')
         .where('created_at', isGreaterThanOrEqualTo: startOfDay)
         .where('created_at', isLessThanOrEqualTo: endOfDay)
         .orderBy('created_at', descending: true)
         .snapshots()
         .listen(
-      (snapshot) async {
-        List<FoodItem> newFoodList = [];
-        try {
-          for (var doc in snapshot.docs) {
-            var data = doc.data();
-            String foodName = data['食物名'] ?? '未命名';
-            if (foodName == 'string' || foodName == '未命名') continue;
-
-            String docId = doc.id;
-            String suggestion = data['AI分析建議'] ?? '';
-            String imgUrl = data['圖片_base64'] ?? data['圖片網址'] ?? '';
-            String mealType = (data['meal_type'] ?? '').toString();
-
-            // 取得建立時間
-            Timestamp? createdAt = data['created_at'];
-            DateTime itemTime = createdAt != null ? createdAt.toDate() : DateTime.now();
-
-            if (mealType.isEmpty) {
-               // 嘗試讀取 created_at，如果是 null 則用現在時間
-               // 呼叫剛剛寫好的函式來自動填入
-               mealType = _getMealTypeByTime(itemTime);
-            }
-
-            List<Ingredient> ingredientsList = [];
-            double totalGrams = 0;
-            double totalCalories = 0;
-            double totalProtein = 0;
-            double totalCarbs = 0;
-            double totalFat = 0;
-
+          (snapshot) async {
+            List<FoodItem> newFoodList = [];
             try {
-              var ingredientSnapshot =
-                  await doc.reference.collection('ingredients').get();
+              for (var doc in snapshot.docs) {
+                var data = doc.data();
+                String foodName = data['食物名'] ?? '未命名';
+                if (foodName == 'string' || foodName == '未命名') continue;
 
-              for (var ingDoc in ingredientSnapshot.docs) {
-                var ingData = ingDoc.data();
-                double g = _parseToDouble(ingData['重量(g)']);
-                double cal = _parseToDouble(ingData['熱量(kcal)']);
-                double p = _parseToDouble(ingData['蛋白質(g)']);
-                double c = _parseToDouble(ingData['碳水化合物(g)']);
-                double f = _parseToDouble(ingData['脂肪(g)']);
-                String name = ingData['食材名'] ?? '未知食材';
+                String docId = doc.id;
+                String suggestion = data['AI分析建議'] ?? '';
+                String imgUrl = data['圖片_base64'] ?? data['圖片網址'] ?? '';
+                String mealType = (data['meal_type'] ?? '').toString();
 
-                totalGrams += g;
-                totalCalories += cal;
-                totalProtein += p;
-                totalCarbs += c;
-                totalFat += f;
+                // 取得建立時間
+                Timestamp? createdAt = data['created_at'];
+                DateTime itemTime = createdAt != null
+                    ? createdAt.toDate()
+                    : DateTime.now();
 
-                ingredientsList.add(
-                  Ingredient(
-                    id: ingDoc.id,
-                    name: name,
-                    grams: g,
-                    calories: cal,
-                    carbs: c,
-                    protein: p,
-                    fat: f,
+                if (mealType.isEmpty) {
+                  mealType = _getMealTypeByTime(itemTime);
+                }
+
+                List<Ingredient> ingredientsList = [];
+                double totalGrams = 0;
+                double totalCalories = 0;
+                double totalProtein = 0;
+                double totalCarbs = 0;
+                double totalFat = 0;
+
+                try {
+                  var ingredientSnapshot = await doc.reference
+                      .collection('ingredients')
+                      .get();
+
+                  for (var ingDoc in ingredientSnapshot.docs) {
+                    var ingData = ingDoc.data();
+                    double g = _parseToDouble(ingData['重量(g)']);
+                    double cal = _parseToDouble(ingData['熱量(kcal)']);
+                    double p = _parseToDouble(ingData['蛋白質(g)']);
+                    double c = _parseToDouble(ingData['碳水化合物(g)']);
+                    double f = _parseToDouble(ingData['脂肪(g)']);
+                    String name = ingData['食材名'] ?? '未知食材';
+
+                    totalGrams += g;
+                    totalCalories += cal;
+                    totalProtein += p;
+                    totalCarbs += c;
+                    totalFat += f;
+
+                    ingredientsList.add(
+                      Ingredient(
+                        id: ingDoc.id,
+                        name: name,
+                        grams: g,
+                        calories: cal,
+                        carbs: c,
+                        protein: p,
+                        fat: f,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  print("讀取食材錯誤: $e");
+                }
+
+                newFoodList.add(
+                  FoodItem(
+                    reference: doc.reference,
+                    id: docId,
+                    name: foodName,
+                    calories: '${totalCalories.toStringAsFixed(0)} 大卡',
+                    imagePath: imgUrl,
+                    grams: totalGrams.toStringAsFixed(1),
+                    protein: totalProtein.toStringAsFixed(1),
+                    carbs: totalCarbs.toStringAsFixed(1),
+                    fat: totalFat.toStringAsFixed(1),
+                    ingredients: ingredientsList,
+                    remark: data['備註'] ?? '',
+                    aiSuggestion: suggestion,
+                    mealType: mealType,
+                    createdAt: itemTime,
                   ),
                 );
               }
             } catch (e) {
-              print("讀取食材錯誤: $e");
+              print("處理資料錯誤: $e");
             }
 
-            newFoodList.add(
-              FoodItem(
-                reference: doc.reference,
-                id: docId,
-                name: foodName,
-                calories: '${totalCalories.toStringAsFixed(0)} 大卡',
-                imagePath: imgUrl,
-                grams: totalGrams.toStringAsFixed(1),
-                protein: totalProtein.toStringAsFixed(1),
-                carbs: totalCarbs.toStringAsFixed(1),
-                fat: totalFat.toStringAsFixed(1),
-                ingredients: ingredientsList,
-                remark: data['備註'] ?? '',
-                aiSuggestion: suggestion,
-                mealType: mealType,
-                createdAt: itemTime,
-              ),
-            );
-          }
-        } catch (e) {
-          print("處理資料錯誤: $e");
-        }
-
-        if (mounted) {
-          setState(() {
-            _foodList = newFoodList;
-            _isLoading = false;
-          });
-        }
-      },
-      onError: (error) {
-        print("Firebase 查詢錯誤: $error");
-        if (mounted) setState(() => _isLoading = false);
-      },
-    );
+            if (mounted) {
+              setState(() {
+                _foodList = newFoodList;
+                _isLoading = false;
+              });
+            }
+          },
+          onError: (error) {
+            print("Firebase 查詢錯誤: $error");
+            // 🟢 如果是因為權限不足 (Permission Denied)，代表沒有被分享
+            if (error.toString().contains("permission")) {
+              if (mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text("您沒有權限查看此家人的資料")));
+              }
+            }
+            if (mounted) setState(() => _isLoading = false);
+          },
+        );
   }
 
   double _parseToDouble(dynamic value) {
@@ -441,14 +486,16 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     }
   }
 
-  // 新增：打開週報月報頁面
+  // 🟢 開啟週報月報 (動態帶入正在觀看的對象 UID)
   Future<void> _openReportPage() async {
+    final reportTargetUid =
+        _targetUid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ReportPage(
-          userId: FirebaseAuth.instance.currentUser?.uid ?? '',
-          initialReferenceDate: _selectedDate,  // 👈 傳入目前選擇的日期
+          userId: reportTargetUid,
+          initialReferenceDate: _selectedDate, // 傳入目前選擇的日期
         ),
       ),
     );
@@ -461,16 +508,36 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         automaticallyImplyLeading: false,
         backgroundColor: const Color.fromARGB(255, 157, 198, 194),
         elevation: 0,
+        // 🟢 修改標題：顯示目前正在看誰
+        title: _targetName == "我自己"
+            ? null
+            : Text("正在檢視: $_targetName", style: const TextStyle(fontSize: 16)),
         actions: [
+          // 1. 家庭切換器 (來自 familysetting0402)
+          FamilySwitcher(
+            currentName: _targetName,
+            onSelected: (uid, name) {
+              setState(() {
+                _targetUid = uid;
+                _targetName = name;
+                _isLoading = true; // 切換時顯示 loading
+              });
+              // 重新監聽資料流
+              _listenToFirebaseData();
+            },
+          ),
+          
+          // 2. 通知鈴鐺 (來自 main 分支)
           Padding(
-            padding: const EdgeInsets.only(right: 15.0),
+            padding: const EdgeInsets.only(right: 8.0),
             child: NotificationBell(
               onPressed: () {
                 NotificationUI.showTodayNotifications(context);
               },
             ),
           ),
-          // 新增：週報月報按鈕
+          
+          // 3. 週報月報按鈕
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: IconButton(
@@ -479,8 +546,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               tooltip: '週報月報',
             ),
           ),
+          
+          // 4. 設定圖示
           Padding(
-            padding: const EdgeInsets.only(right: 25.0),
+            padding: const EdgeInsets.only(right: 15.0),
             child: IconButton(
               onPressed: () async {
                 await _navigateToSettings();
@@ -501,6 +570,25 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // 🟢 如果是看家人，顯示醒目的提示條
+                      if (_targetName != "我自己")
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "您目前正在檢視 $_targetName 的飲食紀錄 (唯讀模式)",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.orange[900],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
                       _buildDecoratedContainer(_buildLeftColumn(context, true)),
                       const SizedBox(height: 16),
                       _buildRightColumn(context),
@@ -514,7 +602,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                   Expanded(
                     flex: 3,
                     child: _buildDecoratedContainer(
-                        _buildLeftColumn(context, false)),
+                      _buildLeftColumn(context, false),
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(flex: 2, child: _buildRightColumn(context)),
@@ -525,30 +614,33 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         ),
       ),
       floatingActionButton: Container(
-        margin: const EdgeInsets.only(
-          right: 20,
-          bottom: 25,
-        ),
-        child: FloatingActionButton.small(
-          elevation: 4,
-          backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-          foregroundColor: Colors.white,
-          child: const Icon(Icons.add, size: 20),
-          onPressed: () async {
-            final result = await Navigator.pushNamed(context, '/analysis');
+        margin: const EdgeInsets.only(right: 20, bottom: 25),
+        // 🟢 如果是看家人，隱藏新增按鈕 (不能幫家人新增)
+        child: _targetName != "我自己"
+            ? null
+            : FloatingActionButton.small(
+                elevation: 4,
+                backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+                foregroundColor: Colors.white,
+                child: const Icon(Icons.add, size: 20),
+                onPressed: () async {
+                  final result = await Navigator.pushNamed(
+                    context,
+                    '/analysis',
+                  );
 
-            // 如果回傳 true，代表有新增資料
-            if (result == true) {
-              if (mounted) {
-                setState(() {
-                  _selectedDate = DateTime.now();
-                  _isLoading = true;
-                });
-                _listenToFirebaseData();
-              }
-            }
-          },
-        ),
+                  // 如果回傳 true，代表有新增資料
+                  if (result == true) {
+                    if (mounted) {
+                      setState(() {
+                        _selectedDate = DateTime.now();
+                        _isLoading = true;
+                      });
+                      _listenToFirebaseData();
+                    }
+                  }
+                },
+              ),
       ),
     );
   }
@@ -575,10 +667,12 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   // 左邊UI
   Widget _buildLeftColumn(BuildContext context, bool isMobile) {
     final _DailyTotals currentTotals = _calculateCurrentTotals();
-    final double calPercent =
-        (currentTotals.calories / _targetCalories).clamp(0, 1);
-    final double proteinPercent =
-        (currentTotals.protein / _targetProtein).clamp(0, 1);
+    final double calPercent = (currentTotals.calories / _targetCalories).clamp(
+      0,
+      1,
+    );
+    final double proteinPercent = (currentTotals.protein / _targetProtein)
+        .clamp(0, 1);
     final double carbPercent = (currentTotals.carbs / _targetCarbs).clamp(0, 1);
     final double fatPercent = (currentTotals.fat / _targetFat).clamp(0, 1);
 
@@ -591,10 +685,12 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     final double proteinRingPercent = totalMacroCalories == 0
         ? 0
         : proteinCalories / totalMacroCalories;
-    final double carbRingPercent =
-        totalMacroCalories == 0 ? 0 : carbCalories / totalMacroCalories;
-    final double fatRingPercent =
-        totalMacroCalories == 0 ? 0 : fatCalories / totalMacroCalories;
+    final double carbRingPercent = totalMacroCalories == 0
+        ? 0
+        : carbCalories / totalMacroCalories;
+    final double fatRingPercent = totalMacroCalories == 0
+        ? 0
+        : fatCalories / totalMacroCalories;
 
     return SingleChildScrollView(
       child: Padding(
@@ -622,13 +718,16 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                   onPressed: () async {
                     final DateTime now = DateTime.now();
                     final DateTime fiveYearsAgo = DateTime(
-                      now.year - 5, now.month, now.day,
+                      now.year - 5,
+                      now.month,
+                      now.day,
                     );
 
                     DateTime? picked = await showDatePicker(
                       context: context,
-                      initialDate:
-                          _selectedDate.isAfter(now) ? now : _selectedDate,
+                      initialDate: _selectedDate.isAfter(now)
+                          ? now
+                          : _selectedDate,
                       firstDate: fiveYearsAgo,
                       lastDate: now,
                     );
@@ -681,11 +780,11 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                             value: totalMacroCalories == 0
                                 ? 100
                                 : (100 -
-                                        (proteinRingPercent +
-                                                carbRingPercent +
-                                                fatRingPercent) *
-                                            100)
-                                    .clamp(0, 100),
+                                          (proteinRingPercent +
+                                                  carbRingPercent +
+                                                  fatRingPercent) *
+                                              100)
+                                      .clamp(0, 100),
                             radius: 30,
                             showTitle: false,
                           ),
@@ -705,9 +804,18 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text('蛋白質: ${(proteinRingPercent * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
-                                Text('碳水: ${(carbRingPercent * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
-                                Text('脂肪: ${(fatRingPercent * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12)),
+                                Text(
+                                  '蛋白質: ${(proteinRingPercent * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  '碳水: ${(carbRingPercent * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  '脂肪: ${(fatRingPercent * 100).toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
                               ],
                             ),
                     ),
@@ -726,14 +834,17 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                     children: [
                       const Text(
                         '成人每日建議營養攝取量',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       // 這裡插入提示 icon
                       _buildInfoTooltip(),
                     ],
                   ),
-                  // 如果還沒設定目標，顯示設定按鈕
-                  if (!_isGoalSet) ...[
+                  // 如果還沒設定目標，且正在看自己的資料，顯示設定按鈕
+                  if (!_isGoalSet && _targetName == "我自己") ...[
                     const SizedBox(height: 8),
                     Align(
                       alignment: Alignment.centerLeft,
@@ -748,56 +859,56 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 children: [
                   const Text(
                     '成人每日建議營養攝取量',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   // 這裡插入提示 icon
                   _buildInfoTooltip(),
 
-                  const Spacer(), // 讓後面的按鈕靠右對齊
+                  const Spacer(),
 
-                  if (!_isGoalSet)
+                  if (!_isGoalSet && _targetName == "我自己")
                     _buildSetGoalButton(),
                 ],
               ),
 
             const SizedBox(height: 15),
 
-            // 1. 熱量條 (維持不變)
+            // 1. 熱量條
             _buildNutrientBar(
               '熱量 (Calories)',
               const Color(0xFFE96A60),
               calPercent,
-              targetValue: _targetCalories, // 傳入目標值供顯示
+              targetValue: _targetCalories,
               unit: 'kcal',
             ),
             const SizedBox(height: 15),
 
-            // 2. 蛋白質條 (顯示熱量)
+            // 2. 蛋白質條
             _buildNutrientBar(
               '蛋白質 (Protein)',
               const Color.fromARGB(255, 117, 181, 233),
               proteinPercent,
-              targetValue: _targetProtein * 4, // 公克 * 4 = 熱量
+              targetValue: _targetProtein * 4,
               unit: 'kcal',
             ),
             const SizedBox(height: 15),
 
-            // 3. 碳水化合物條 (顯示熱量)
+            // 3. 碳水化合物條
             _buildNutrientBar(
               '碳水化合物 (Carbs)',
               const Color.fromARGB(255, 132, 202, 206),
               carbPercent,
-              targetValue: _targetCarbs * 4, // 公克 * 4 = 熱量
+              targetValue: _targetCarbs * 4,
               unit: 'kcal',
             ),
             const SizedBox(height: 15),
 
-            // 4. 脂肪條 (顯示熱量)
+            // 4. 脂肪條
             _buildNutrientBar(
               '脂肪 (Fat)',
               const Color.fromARGB(255, 245, 190, 118),
               fatPercent,
-              targetValue: _targetFat * 9, // 公克 * 9 = 熱量
+              targetValue: _targetFat * 9,
               unit: 'kcal',
             ),
           ],
@@ -817,12 +928,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         padding: WidgetStateProperty.all(EdgeInsets.zero),
         minimumSize: WidgetStateProperty.all(Size.zero),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        overlayColor: WidgetStateProperty.all(
-          Colors.transparent,
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith((
-          states,
-        ) {
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.pressed)) {
             return const Color(0xFF7A9C99);
           }
@@ -831,10 +938,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       ),
       child: const Text(
         '> 設定完整健康目標以查看報告',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -866,9 +970,14 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     );
   }
 
-  Widget _buildNutrientBar(String label, Color color, double percentage, {double? targetValue, String unit = ''}) {
-    final String percentageString =
-        '${(percentage * 100).toStringAsFixed(0)}%';
+  Widget _buildNutrientBar(
+    String label,
+    Color color,
+    double percentage, {
+    double? targetValue,
+    String unit = '',
+  }) {
+    final String percentageString = '${(percentage * 100).toStringAsFixed(0)}%';
     final Color textColor = percentage >= 1.0 ? Colors.red : Colors.black54;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -924,25 +1033,22 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             const Divider(),
 
             _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
+                ? const Center(child: CircularProgressIndicator())
                 : _foodList.isEmpty
-                    ? const Center(child: Text("目前尚無餐點分析紀錄！"))
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics:
-                            const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.only(top: 8.0),
-                        itemCount: _foodList.length,
-                        itemBuilder: (context, index) {
-                          final item = _foodList[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: _buildFoodItem(context, item),
-                          );
-                        },
-                      ),
+                ? const Center(child: Text("目前尚無餐點分析紀錄！"))
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.only(top: 8.0),
+                    itemCount: _foodList.length,
+                    itemBuilder: (context, index) {
+                      final item = _foodList[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: _buildFoodItem(context, item),
+                      );
+                    },
+                  ),
           ],
         ),
       ),
@@ -988,13 +1094,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
   // 單一食物項目
   Widget _buildFoodItem(BuildContext context, FoodItem item) {
-    // print("檢查圖片資料：[${item.imagePath}]");
-    Uint8List? imageBytes;
     Widget imageWidget;
 
     if (item.imagePath.startsWith('data:image') ||
-        (item.imagePath.length > 1000 &&
-            !item.imagePath.startsWith('http'))) {
+        (item.imagePath.length > 1000 && !item.imagePath.startsWith('http'))) {
       try {
         final base64String = item.imagePath.replaceFirst(
           'data:image/jpeg;base64,',
@@ -1023,14 +1126,15 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       imageWidget = _buildImagePlaceholder();
     }
 
+    // 🟢 如果正在看家人的資料，點擊應該是「只能看，不能改」
+    final bool isViewingOthers = _targetName != "我自己";
+
     return InkWell(
-      onTap: () async {
-        await _showFoodEditDialog(
-          context,
-          item,
-          _selectedDate,
-        );
-      },
+      onTap: isViewingOthers
+          ? null // 監控模式下不可編輯
+          : () async {
+              await _showFoodEditDialog(context, item, _selectedDate);
+            },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Row(
@@ -1062,57 +1166,57 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                   ),
                   Text(
                     item.calories,
-                    style:
-                        const TextStyle(fontSize: 14, color: Colors.grey),
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
               ),
             ),
 
-            SizedBox(
-              width: 40,
-              child: IconButton(
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Color.fromARGB(255, 26, 24, 23),
-                ),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext dialogContext) {
-                      return AlertDialog(
-                        title: const Text('刪除'),
-                        content: Text('您確定要永久刪除「${item.name}」嗎？'),
-                        actions: <Widget>[
-                          TextButton(
-                            child: const Text('取消'),
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop();
-                            },
-                          ),
-                          TextButton(
-                            child: const Text('確認'),
-                            onPressed: () async {
-                              Navigator.of(dialogContext).pop();
+            // 🟢 如果是看家人，不顯示刪除按鈕
+            if (!isViewingOthers)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: Color.fromARGB(255, 26, 24, 23),
+                  ),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (BuildContext dialogContext) {
+                        return AlertDialog(
+                          title: const Text('刪除'),
+                          content: Text('您確定要永久刪除「${item.name}」嗎？'),
+                          actions: <Widget>[
+                            TextButton(
+                              child: const Text('取消'),
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop();
+                              },
+                            ),
+                            TextButton(
+                              child: const Text('確認'),
+                              onPressed: () async {
+                                Navigator.of(dialogContext).pop();
 
-                              if (item.reference != null) {
-                                try {
-                                  await item.reference!.delete();
-                                  print(
-                                      "已成功從 Firebase 刪除文件: ${item.name}");
-                                } catch (e) {
-                                  print("刪除失敗: $e");
+                                if (item.reference != null) {
+                                  try {
+                                    await item.reference!.delete();
+                                    print("已成功從 Firebase 刪除文件: ${item.name}");
+                                  } catch (e) {
+                                    print("刪除失敗: $e");
+                                  }
                                 }
-                              }
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -1132,15 +1236,14 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       context: context,
       builder: (BuildContext context) {
         final double screenWidth = MediaQuery.of(context).size.width;
-        final double dialogWidth =
-            screenWidth > 800 ? 600 : screenWidth * 0.9;
+        final double dialogWidth = screenWidth > 800 ? 600 : screenWidth * 0.9;
 
         return Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Container(
-            width: dialogWidth,
+            width: dialogWidth, // 使用計算後的寬度
             child: FoodEditDialogContent(
               item: item,
               selectedDate: selectedDate,
@@ -1150,10 +1253,10 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       },
     );
   }
-}
+} // 結束 _NutritionHomePageState
 
 // ----------------------------------------------
-// 彈出視窗內容(詳情頁面) - 完整保留原有程式碼
+// 彈出視窗內容(詳情頁面)
 // ----------------------------------------------
 
 class FoodEditDialogContent extends StatefulWidget {
@@ -1220,12 +1323,21 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _remarksController = TextEditingController(text: widget.item.remark);
     // 透過map和copy()產生全新的食材列表
     _ingredients = widget.item.ingredients.map((e) => e.copy()).toList();
-    _calculateTotals();
+
+    _calculateTotals(); // 確保重新計算數值
+
     // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
     if (widget.item.mealType.isNotEmpty &&
         _mealOptions.contains(widget.item.mealType)) {
       _selectedMealType = widget.item.mealType;
     }
+
+    // 初始化數值
+    _gramController.text = widget.item.grams;
+    _calController.text = widget.item.calories.replaceAll(' 大卡', '');
+    _proteinController.text = widget.item.protein;
+    _carbController.text = widget.item.carbs;
+    _fatController.text = widget.item.fat;
   }
 
   @override
@@ -1263,13 +1375,14 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 6), // 圓點跟文字的間距
+              const SizedBox(width: 6),
             ],
             Text(
               label,
               style: const TextStyle(
-              fontWeight: FontWeight.w600, fontSize: 11.5),
-
+                fontWeight: FontWeight.w600,
+                fontSize: 11.5,
+              ),
             ),
           ],
         ),
@@ -1307,8 +1420,9 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
   Widget _buildIngredientRow(Ingredient ingredient, int index) {
     final bool isDeleted = ingredient.isDeleted;
     final Color textColor = isDeleted ? Colors.grey[400]! : Colors.black87;
-    final Color subTextColor =
-        isDeleted ? Colors.grey[300]! : Colors.grey[600]!;
+    final Color subTextColor = isDeleted
+        ? Colors.grey[300]!
+        : Colors.grey[600]!;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -1344,9 +1458,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                     isDeleted
                         ? Icons.add_circle_outline
                         : Icons.remove_circle_outline,
-                    color: isDeleted
-                        ? Colors.teal
-                        : Colors.red[300],
+                    color: isDeleted ? Colors.teal : Colors.red[300],
                     size: 24,
                   ),
                   onPressed: () {
@@ -1379,14 +1491,23 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  _buildMacroInfo(Icons.circle,
-                      const Color.fromARGB(255, 117, 181, 233), ingredient.protein),
+                  _buildMacroInfo(
+                    Icons.circle,
+                    const Color.fromARGB(255, 117, 181, 233),
+                    ingredient.protein,
+                  ),
                   const SizedBox(width: 16),
-                  _buildMacroInfo(Icons.circle,
-                      const Color.fromARGB(255, 132, 202, 206), ingredient.carbs),
+                  _buildMacroInfo(
+                    Icons.circle,
+                    const Color.fromARGB(255, 132, 202, 206),
+                    ingredient.carbs,
+                  ),
                   const SizedBox(width: 16),
-                  _buildMacroInfo(Icons.circle,
-                      const Color.fromARGB(255, 245, 190, 118), ingredient.fat),
+                  _buildMacroInfo(
+                    Icons.circle,
+                    const Color.fromARGB(255, 245, 190, 118),
+                    ingredient.fat,
+                  ),
                 ],
               ),
             ),
@@ -1400,11 +1521,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: color,
-        ),
+        Icon(icon, size: 16, color: color),
         const SizedBox(width: 4),
         Text(
           '${value.toStringAsFixed(1)}g',
@@ -1426,8 +1543,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     if (path.startsWith('data:image') ||
         (path.length > 1000 && !path.startsWith('http'))) {
       try {
-        final base64String =
-            path.replaceFirst('data:image/jpeg;base64,', '');
+        final base64String = path.replaceFirst('data:image/jpeg;base64,', '');
         final Uint8List bytes = base64Decode(base64String);
         imageWidget = Image.memory(
           bytes,
@@ -1439,8 +1555,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
         print("圖片解碼錯誤: $e");
         imageWidget = const Icon(Icons.broken_image, color: Colors.grey);
       }
-    }
-    else if (path.startsWith('http')) {
+    } else if (path.startsWith('http')) {
       imageWidget = Image.network(
         path,
         fit: BoxFit.cover,
@@ -1449,8 +1564,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
         errorBuilder: (context, error, stackTrace) =>
             const Icon(Icons.broken_image, color: Colors.grey),
       );
-    }
-    else {
+    } else {
       imageWidget = const Icon(Icons.restaurant, color: Colors.grey);
     }
     return SingleChildScrollView(
@@ -1531,7 +1645,9 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                         Text(
                           "${widget.selectedDate.year}/${widget.selectedDate.month.toString().padLeft(2, '0')}/${widget.selectedDate.day.toString().padLeft(2, '0')}",
                           style: TextStyle(
-                              color: Colors.grey[600], fontSize: 13),
+                            color: Colors.grey[600],
+                            fontSize: 13,
+                          ),
                         ),
 
                         const SizedBox(width: 12),
@@ -1556,13 +1672,13 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                               elevation: 4,
                               // 3. 設定按鈕原本長什麼樣子 (顯示選中的文字 + 箭頭)
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      _selectedMealType ?? '選擇時段', // 如果是 null 就顯示提示
+                                      _selectedMealType ?? '選擇時段',
                                       style: TextStyle(
-                                        // 如果沒選(提示文字)用灰色，有選用黑色
                                         color: _selectedMealType == null
                                             ? Colors.grey[500]
                                             : Colors.black87,
@@ -1572,8 +1688,11 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  const Icon(Icons.arrow_drop_down,
-                                      size: 18, color: Colors.grey),
+                                  const Icon(
+                                    Icons.arrow_drop_down,
+                                    size: 18,
+                                    color: Colors.grey,
+                                  ),
                                 ],
                               ),
                               // 4. 當選擇項目時的邏輯
@@ -1667,8 +1786,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
           ListView.builder(
             shrinkWrap: true,
-            physics:
-                const NeverScrollableScrollPhysics(),
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: _ingredients.length,
             itemBuilder: (context, index) {
               return _buildIngredientRow(_ingredients[index], index);
@@ -1769,8 +1887,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                             double.tryParse(_proteinController.text) ?? 0,
                         'total_carbs':
                             double.tryParse(_carbController.text) ?? 0,
-                        'total_fat':
-                            double.tryParse(_fatController.text) ?? 0,
+                        'total_fat': double.tryParse(_fatController.text) ?? 0,
                         'last_updated': FieldValue.serverTimestamp(),
                       });
 
@@ -1791,7 +1908,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 }
 
 // ----------------------------------------------
-// 週報月報頁面 (這次真的把 💡 刪乾淨了！)
+// 週報月報頁面
 // ----------------------------------------------
 
 enum ReportType { weekly, monthly, custom }
@@ -1801,7 +1918,7 @@ class ReportPage extends StatefulWidget {
   final DateTime? initialReferenceDate;
 
   const ReportPage({
-    super.key, 
+    super.key,
     required this.userId,
     this.initialReferenceDate,
   });
@@ -1815,7 +1932,7 @@ class _ReportPageState extends State<ReportPage> {
   bool _isLoading = true;
   ReportData? _reportData;
   List<FoodItem> _periodFoodList = [];
-  
+
   DateTime? _customStartDate;
   DateTime? _customEndDate;
   DateTime? _referenceDate;
@@ -1828,26 +1945,32 @@ class _ReportPageState extends State<ReportPage> {
     _loadReportData();
   }
 
-  // --- 1. AI 建議生成邏輯 (這次文字前面完全沒有 Icon 了) ---
+  // --- 1. AI 建議生成邏輯 ---
   String _generateAIFeedback(double avgCal, double p, double c, double f) {
-    // 這裡原本有 💡，現在已經徹底刪掉了
     if (avgCal == 0) return "目前尚無足夠數據。開始記錄餐點，AI 將為您分析飲食趨勢！";
-    
+
     List<String> suggestions = [];
-    
+
     if (avgCal > 2300) {
-      suggestions.add("⚠️ 本期平均熱量攝取較高 (${avgCal.toStringAsFixed(0)} kcal)，建議控制精緻澱粉份量並增加活動量。");
+      suggestions.add(
+        "⚠️ 本期平均熱量攝取較高 (${avgCal.toStringAsFixed(0)} kcal)，建議控制精緻澱粉份量並增加活動量。",
+      );
     } else if (avgCal < 1200 && avgCal > 0) {
       suggestions.add("ℹ️ 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。");
     } else {
-      suggestions.add("✅ 平均攝取熱量穩定 (${avgCal.toStringAsFixed(0)} kcal)，請繼續保持良好習慣！");
+      suggestions.add(
+        "✅ 平均攝取熱量穩定 (${avgCal.toStringAsFixed(0)} kcal)，請繼續保持良好習慣！",
+      );
     }
 
     double totalMacroCal = (p * 4) + (c * 4) + (f * 9);
     if (totalMacroCal > 0) {
-      if ((p * 4) / totalMacroCal < 0.15) suggestions.add("🥚 蛋白質比例稍低，可以多補充豆魚蛋肉類。");
-      if ((c * 4) / totalMacroCal > 0.65) suggestions.add("🍚 碳水比例偏高，建議減少精緻糖類攝取。");
-      if ((f * 9) / totalMacroCal > 0.35) suggestions.add("🥑 脂質比例較高，建議多採用清蒸或水煮。");
+      if ((p * 4) / totalMacroCal < 0.15)
+        suggestions.add("🥚 蛋白質比例稍低，可以多補充豆魚蛋肉類。");
+      if ((c * 4) / totalMacroCal > 0.65)
+        suggestions.add("🍚 碳水比例偏高，建議減少精緻糖類攝取。");
+      if ((f * 9) / totalMacroCal > 0.35)
+        suggestions.add("🥑 脂質比例較高，建議多採用清蒸或水煮。");
     }
 
     if (suggestions.length == 1) suggestions.add("🌟 您的飲食比例均衡，目前維持得非常好！");
@@ -1869,22 +1992,45 @@ class _ReportPageState extends State<ReportPage> {
           break;
         case ReportType.monthly:
           startDate = DateTime(_referenceDate!.year, _referenceDate!.month, 1);
-          endDate = DateTime(_referenceDate!.year, _referenceDate!.month + 1, 0);
+          endDate = DateTime(
+            _referenceDate!.year,
+            _referenceDate!.month + 1,
+            0,
+          );
           break;
         case ReportType.custom:
-          startDate = _customStartDate ?? DateTime(now.year, now.month, now.day - 7);
+          startDate =
+              _customStartDate ?? DateTime(now.year, now.month, now.day - 7);
           endDate = _customEndDate ?? now;
           break;
       }
 
-      startDate = DateTime(startDate.year, startDate.month, startDate.day, 0, 0, 0);
-      endDate = DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59, 999);
+      startDate = DateTime(
+        startDate.year,
+        startDate.month,
+        startDate.day,
+        0,
+        0,
+        0,
+      );
+      endDate = DateTime(
+        endDate.year,
+        endDate.month,
+        endDate.day,
+        23,
+        59,
+        59,
+        999,
+      );
 
       final snapshot = await FirebaseFirestore.instance
-          .collection('users').doc(widget.userId).collection('analysis_records')
+          .collection('users')
+          .doc(widget.userId)
+          .collection('analysis_records')
           .where('created_at', isGreaterThanOrEqualTo: startDate)
           .where('created_at', isLessThanOrEqualTo: endDate)
-          .orderBy('created_at', descending: false).get();
+          .orderBy('created_at', descending: false)
+          .get();
 
       List<FoodItem> periodFoods = [];
       Map<DateTime, double> dailyCalories = {};
@@ -1895,7 +2041,11 @@ class _ReportPageState extends State<ReportPage> {
         Timestamp? createdAt = data['created_at'];
         if (createdAt == null) continue;
         DateTime itemDate = createdAt.toDate();
-        DateTime dateKey = DateTime(itemDate.year, itemDate.month, itemDate.day);
+        DateTime dateKey = DateTime(
+          itemDate.year,
+          itemDate.month,
+          itemDate.day,
+        );
         double mCal = 0, mP = 0, mC = 0, mF = 0, mW = 0;
         var ingSnapshot = await doc.reference.collection('ingredients').get();
         for (var ingDoc in ingSnapshot.docs) {
@@ -1907,21 +2057,36 @@ class _ReportPageState extends State<ReportPage> {
           mW += _parseToDouble(ing['重量(g)']);
         }
         dailyCalories[dateKey] = (dailyCalories[dateKey] ?? 0) + mCal;
-        tCal += mCal; tP += mP; tC += mC; tF += mF; tW += mW;
-        periodFoods.add(FoodItem(
-          reference: doc.reference, id: doc.id, name: data['食物名'] ?? '未命名', 
-          calories: '${mCal.toStringAsFixed(0)} 大卡', imagePath: data['圖片_base64'] ?? data['圖片網址'] ?? '',
-          grams: mW.toStringAsFixed(1), protein: mP.toStringAsFixed(1), carbs: mC.toStringAsFixed(1), fat: mF.toStringAsFixed(1),
-          ingredients: [], remark: data['備註'] ?? '', aiSuggestion: data['AI分析建議'] ?? '',
-          mealType: data['meal_type'] ?? _getMealTypeByTime(itemDate), createdAt: itemDate,
-        ));
+        tCal += mCal;
+        tP += mP;
+        tC += mC;
+        tF += mF;
+        tW += mW;
+        periodFoods.add(
+          FoodItem(
+            reference: doc.reference,
+            id: doc.id,
+            name: data['食物名'] ?? '未命名',
+            calories: '${mCal.toStringAsFixed(0)} 大卡',
+            imagePath: data['圖片_base64'] ?? data['圖片網址'] ?? '',
+            grams: mW.toStringAsFixed(1),
+            protein: mP.toStringAsFixed(1),
+            carbs: mC.toStringAsFixed(1),
+            fat: mF.toStringAsFixed(1),
+            ingredients: [],
+            remark: data['備註'] ?? '',
+            aiSuggestion: data['AI分析建議'] ?? '',
+            mealType: data['meal_type'] ?? _getMealTypeByTime(itemDate),
+            createdAt: itemDate,
+          ),
+        );
       }
 
-      // 計算總天數（區間內一共有幾天）
+      // 計算總天數
       int totalDaysInRange = endDate.difference(startDate).inDays + 1;
       int recordedDaysCount = dailyCalories.length;
 
-      // 計算平均值：除以總天數（沒紀錄的日子算 0）
+      // 計算平均值
       double avgCal = tCal / totalDaysInRange;
       double avgProtein = tP / totalDaysInRange;
       double avgCarbs = tC / totalDaysInRange;
@@ -1940,11 +2105,17 @@ class _ReportPageState extends State<ReportPage> {
           'carbs': recordedDaysCount > 0 ? tC / recordedDaysCount : 0,
           'fat': recordedDaysCount > 0 ? tF / recordedDaysCount : 0,
         },
-        topCalorieDays: dailyCalories.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
+        topCalorieDays: dailyCalories.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value)),
         aiFeedback: _generateAIFeedback(avgCal, avgProtein, avgCarbs, avgFat),
       );
-      setState(() { _periodFoodList = periodFoods; _isLoading = false; });
-    } catch (e) { setState(() => _isLoading = false); }
+      setState(() {
+        _periodFoodList = periodFoods;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
   }
 
   // --- 3. UI 構建 ---
@@ -1954,121 +2125,386 @@ class _ReportPageState extends State<ReportPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194), elevation: 0,
-        title: const Text('營養報告', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
+        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
+        elevation: 0,
+        title: const Text(
+          '營養報告',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
-          child: Container(color: Colors.white, child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-            _buildReportTypeButton('週報', ReportType.weekly, Icons.calendar_view_week),
-            _buildReportTypeButton('月報', ReportType.monthly, Icons.calendar_view_month),
-            _buildReportTypeButton('自訂', ReportType.custom, Icons.edit_calendar),
-          ])),
+          child: Container(
+            color: Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildReportTypeButton(
+                  '週報',
+                  ReportType.weekly,
+                  Icons.calendar_view_week,
+                ),
+                _buildReportTypeButton(
+                  '月報',
+                  ReportType.monthly,
+                  Icons.calendar_view_month,
+                ),
+                _buildReportTypeButton(
+                  '自訂',
+                  ReportType.custom,
+                  Icons.edit_calendar,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      body: _isLoading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Center(child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Card(
-              elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Row(children: [
-                    const SizedBox(width: 8),
-                    const Text('營養摘要', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  ]),
-                  GestureDetector(onTap: _onDateRangeTap, child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(color: const Color.fromARGB(255, 157, 198, 194).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color.fromARGB(255, 157, 198, 194).withOpacity(0.3))),
-                    child: Row(children: [Text(_getDateRangeText(), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey[700])), const SizedBox(width: 4), const Icon(Icons.edit_calendar, size: 16, color: Color.fromARGB(255, 157, 198, 194))]),
-                  )),
-                ]),
-                const SizedBox(height: 20),
-                Row(children: [
-                  Expanded(child: _buildSummaryItem('總餐數', '${_reportData?.totalMeals}', Icons.restaurant, Colors.blue)),
-                  Expanded(child: _buildSummaryItem('總重量', '${_reportData?.totalWeight.toStringAsFixed(1)} g', Icons.fitness_center, Colors.green)),
-                  Expanded(child: _buildSummaryItem('總熱量', '${_reportData?.totalCalories.toStringAsFixed(0)} kcal', Icons.local_fire_department, Colors.orange)),
-                ]),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Expanded(child: _buildSummaryItem('蛋白質', '${_reportData?.totalProtein.toStringAsFixed(1)} g', Icons.restaurant_menu, const Color.fromARGB(255, 117, 181, 233))),
-                  Expanded(child: _buildSummaryItem('碳水', '${_reportData?.totalCarbs.toStringAsFixed(1)} g', Icons.water_drop, const Color.fromARGB(255, 132, 202, 206))),
-                  Expanded(child: _buildSummaryItem('脂質', '${_reportData?.totalFat.toStringAsFixed(1)} g', Icons.opacity, const Color.fromARGB(255, 245, 190, 118))),
-                ]),
-              ])),
-            ),
-            const SizedBox(height: cardSpacing),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        '營養摘要',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  GestureDetector(
+                                    onTap: _onDateRangeTap,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color.fromARGB(
+                                          255,
+                                          157,
+                                          198,
+                                          194,
+                                        ).withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: const Color.fromARGB(
+                                            255,
+                                            157,
+                                            198,
+                                            194,
+                                          ).withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Text(
+                                            _getDateRangeText(),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.grey[700],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(
+                                            Icons.edit_calendar,
+                                            size: 16,
+                                            color: Color.fromARGB(
+                                              255,
+                                              157,
+                                              198,
+                                              194,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildSummaryItem(
+                                      '總餐數',
+                                      '${_reportData?.totalMeals}',
+                                      Icons.restaurant,
+                                      Colors.blue,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildSummaryItem(
+                                      '總重量',
+                                      '${_reportData?.totalWeight.toStringAsFixed(1)} g',
+                                      Icons.fitness_center,
+                                      Colors.green,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildSummaryItem(
+                                      '總熱量',
+                                      '${_reportData?.totalCalories.toStringAsFixed(0)} kcal',
+                                      Icons.local_fire_department,
+                                      Colors.orange,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildSummaryItem(
+                                      '蛋白質',
+                                      '${_reportData?.totalProtein.toStringAsFixed(1)} g',
+                                      Icons.restaurant_menu,
+                                      const Color.fromARGB(255, 117, 181, 233),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildSummaryItem(
+                                      '碳水',
+                                      '${_reportData?.totalCarbs.toStringAsFixed(1)} g',
+                                      Icons.water_drop,
+                                      const Color.fromARGB(255, 132, 202, 206),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _buildSummaryItem(
+                                      '脂質',
+                                      '${_reportData?.totalFat.toStringAsFixed(1)} g',
+                                      Icons.opacity,
+                                      const Color.fromARGB(255, 245, 190, 118),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: cardSpacing),
 
-            // --- 2. 每日平均卡片 ---
-            Card(
-              elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('每日平均攝取', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                Row(children: [
-                  _buildAvgColumn('${_reportData?.dailyAverages['protein']?.toStringAsFixed(1)} g', '蛋白質', const Color.fromARGB(255, 117, 181, 233)),
-                  _buildAvgColumn('${_reportData?.dailyAverages['carbs']?.toStringAsFixed(1)} g', '碳水', const Color.fromARGB(255, 132, 202, 206)),
-                  _buildAvgColumn('${_reportData?.dailyAverages['fat']?.toStringAsFixed(1)} g', '脂質', const Color.fromARGB(255, 245, 190, 118)),
-                ]),
-              ])),
-            ),
-            const SizedBox(height: cardSpacing),
+                      // --- 2. 每日平均卡片 ---
+                      Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '每日平均攝取',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  _buildAvgColumn(
+                                    '${_reportData?.dailyAverages['protein']?.toStringAsFixed(1)} g',
+                                    '蛋白質',
+                                    const Color.fromARGB(255, 117, 181, 233),
+                                  ),
+                                  _buildAvgColumn(
+                                    '${_reportData?.dailyAverages['carbs']?.toStringAsFixed(1)} g',
+                                    '碳水',
+                                    const Color.fromARGB(255, 132, 202, 206),
+                                  ),
+                                  _buildAvgColumn(
+                                    '${_reportData?.dailyAverages['fat']?.toStringAsFixed(1)} g',
+                                    '脂質',
+                                    const Color.fromARGB(255, 245, 190, 118),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: cardSpacing),
 
-            // --- 3. AI 建議卡片 (左側放✨圖示) ---
-            if (_reportData != null) Card(
-              elevation: 4, color: const Color(0xFFF1F8F7),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Icon(Icons.auto_awesome, color: Colors.teal[600], size: 22),
-                  const SizedBox(width: 8),
-                  const Text('AI 營養觀察與建議', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D4F4B))),
-                ]),
-                const Divider(height: 24, thickness: 0.8),
-                Text(_reportData!.aiFeedback, style: const TextStyle(fontSize: 15, height: 1.6, color: Colors.black87)),
-              ])),
-            ),
-            const SizedBox(height: cardSpacing),
+                      // --- 3. AI 建議卡片 ---
+                      if (_reportData != null)
+                        Card(
+                          elevation: 4,
+                          color: const Color(0xFFF1F8F7),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.auto_awesome,
+                                      color: Colors.teal[600],
+                                      size: 22,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'AI 營養觀察與建議',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF2D4F4B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 24, thickness: 0.8),
+                                Text(
+                                  _reportData!.aiFeedback,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    height: 1.6,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: cardSpacing),
 
-            // --- 4. 餐點紀錄卡片 ---
-            Card(
-              elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${_reportData?.period} 餐點紀錄', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                _periodFoodList.isEmpty ? const Center(child: Text('本期尚無餐點紀錄')) : ListView.separated(
-                  shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _periodFoodList.length,
-                  separatorBuilder: (c, i) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final item = _periodFoodList[index];
-                    return Row(children: [
-                      _buildFoodImage(item.imagePath, item.mealType),
-                      const SizedBox(width: 12),
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        Text('${_formatDate(item.createdAt!)} • ${item.mealType}', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                      ])),
-                      Container(alignment: Alignment.bottomRight, height: 40, child: Text(item.calories, style: const TextStyle(fontWeight: FontWeight.bold))),
-                    ]);
-                  },
+                      // --- 4. 餐點紀錄卡片 ---
+                      Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${_reportData?.period} 餐點紀錄',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              _periodFoodList.isEmpty
+                                  ? const Center(child: Text('本期尚無餐點紀錄'))
+                                  : ListView.separated(
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      itemCount: _periodFoodList.length,
+                                      separatorBuilder: (c, i) =>
+                                          const SizedBox(height: 8),
+                                      itemBuilder: (context, index) {
+                                        final item = _periodFoodList[index];
+                                        return Row(
+                                          children: [
+                                            _buildFoodImage(
+                                              item.imagePath,
+                                              item.mealType,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    item.name,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    '${_formatDate(item.createdAt!)} • ${item.mealType}',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Container(
+                                              alignment: Alignment.bottomRight,
+                                              height: 40,
+                                              child: Text(
+                                                item.calories,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ])),
+              ),
             ),
-          ]),
-        )),
-      ),
     );
   }
 
   // --- 4. 輔助方法 ---
   Widget _buildAvgColumn(String value, String label, Color color) {
-    return Expanded(child: Column(children: [
-      Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
-      Text(label, style: const TextStyle(fontSize: 12)),
-    ]));
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
   }
 
   String _getDateRangeText() {
@@ -2081,7 +2517,9 @@ class _ReportPageState extends State<ReportPage> {
       case ReportType.monthly:
         return '${(_referenceDate ?? now).year}/${(_referenceDate ?? now).month.toString().padLeft(2, '0')}';
       case ReportType.custom:
-        return (_customStartDate != null && _customEndDate != null) ? '${_formatDate(_customStartDate!)} - ${_formatDate(_customEndDate!)}' : '自訂範圍';
+        return (_customStartDate != null && _customEndDate != null)
+            ? '${_formatDate(_customStartDate!)} - ${_formatDate(_customEndDate!)}'
+            : '自訂範圍';
     }
   }
 
@@ -2095,51 +2533,173 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   Widget _buildFoodImage(String path, String mealType) {
-    if (path.startsWith('data:image') || (path.length > 1000 && !path.startsWith('http'))) {
+    if (path.startsWith('data:image') ||
+        (path.length > 1000 && !path.startsWith('http'))) {
       try {
         final b = path.replaceFirst('data:image/jpeg;base64,', '');
-        return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(base64Decode(b), fit: BoxFit.cover, width: 40, height: 40));
-      } catch (e) { return _buildImagePlaceholder(mealType); }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            base64Decode(b),
+            fit: BoxFit.cover,
+            width: 40,
+            height: 40,
+          ),
+        );
+      } catch (e) {
+        return _buildImagePlaceholder(mealType);
+      }
     } else if (path.startsWith('http')) {
-      return ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(path, fit: BoxFit.cover, width: 40, height: 40, errorBuilder: (c, e, s) => _buildImagePlaceholder(mealType)));
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          path,
+          fit: BoxFit.cover,
+          width: 40,
+          height: 40,
+          errorBuilder: (c, e, s) => _buildImagePlaceholder(mealType),
+        ),
+      );
     }
     return _buildImagePlaceholder(mealType);
   }
 
-  Widget _buildImagePlaceholder(String t) => Container(width: 40, height: 40, decoration: BoxDecoration(color: _getMealColor(t).withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(_getMealIcon(t), color: _getMealColor(t), size: 20));
+  Widget _buildImagePlaceholder(String t) => Container(
+    width: 40,
+    height: 40,
+    decoration: BoxDecoration(
+      color: _getMealColor(t).withOpacity(0.1),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Icon(_getMealIcon(t), color: _getMealColor(t), size: 20),
+  );
 
   Widget _buildReportTypeButton(String label, ReportType type, IconData icon) {
     bool isSelected = _selectedReportType == type;
     return GestureDetector(
-      onTap: () { setState(() { _selectedReportType = type; if (type != ReportType.custom && _referenceDate == null) _referenceDate = DateTime.now(); }); _loadReportData(); },
-      child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(border: Border(bottom: BorderSide(color: isSelected ? const Color.fromARGB(255, 157, 198, 194) : Colors.transparent, width: 3))), child: Row(children: [Icon(icon, size: 18, color: isSelected ? const Color.fromARGB(255, 157, 198, 194) : Colors.grey), const SizedBox(width: 4), Text(label, style: TextStyle(color: isSelected ? const Color.fromARGB(255, 157, 198, 194) : Colors.grey, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))])),
+      onTap: () {
+        setState(() {
+          _selectedReportType = type;
+          if (type != ReportType.custom && _referenceDate == null)
+            _referenceDate = DateTime.now();
+        });
+        _loadReportData();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isSelected
+                  ? const Color.fromARGB(255, 157, 198, 194)
+                  : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected
+                  ? const Color.fromARGB(255, 157, 198, 194)
+                  : Colors.grey,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected
+                    ? const Color.fromARGB(255, 157, 198, 194)
+                    : Colors.grey,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, IconData icon, Color color) {
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 48, height: 48, decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 24)),
-      const SizedBox(height: 8),
-      Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-      const SizedBox(height: 2),
-      Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600]), textAlign: TextAlign.center),
-    ]);
+  Widget _buildSummaryItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 24),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
   }
 
-  DateTime _getWeekStartDate(DateTime d) => DateTime(d.year, d.month, d.day - (d.weekday - 1));
-  DateTime _getWeekEndDate(DateTime d) => DateTime(d.year, d.month, d.day + (7 - d.weekday), 23, 59, 59);
-  String _formatDate(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
-  double _parseToDouble(dynamic v) => v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '0') ?? 0.0);
-  IconData _getMealIcon(String t) => t == '早餐' ? Icons.wb_twilight : (t == '午餐' ? Icons.wb_sunny : (t == '晚餐' ? Icons.nights_stay : Icons.cookie));
-  Color _getMealColor(String t) => t == '早餐' ? Colors.amber : (t == '午餐' ? Colors.orange : (t == '晚餐' ? Colors.indigoAccent : Colors.pinkAccent));
+  DateTime _getWeekStartDate(DateTime d) =>
+      DateTime(d.year, d.month, d.day - (d.weekday - 1));
+  DateTime _getWeekEndDate(DateTime d) =>
+      DateTime(d.year, d.month, d.day + (7 - d.weekday), 23, 59, 59);
+  String _formatDate(DateTime d) =>
+      '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
+  double _parseToDouble(dynamic v) =>
+      v is num ? v.toDouble() : (double.tryParse(v?.toString() ?? '0') ?? 0.0);
+  IconData _getMealIcon(String t) => t == '早餐'
+      ? Icons.wb_twilight
+      : (t == '午餐'
+            ? Icons.wb_sunny
+            : (t == '晚餐' ? Icons.nights_stay : Icons.cookie));
+  Color _getMealColor(String t) => t == '早餐'
+      ? Colors.amber
+      : (t == '午餐'
+            ? Colors.orange
+            : (t == '晚餐' ? Colors.indigoAccent : Colors.pinkAccent));
 
   Future<void> _onDateRangeTap() async {
     if (_selectedReportType == ReportType.custom) {
-      DateTimeRange? r = await showDateRangePicker(context: context, firstDate: DateTime(DateTime.now().year, DateTime.now().month - 6), lastDate: DateTime.now());
-      if (r != null) { setState(() { _customStartDate = r.start; _customEndDate = r.end; }); _loadReportData(); }
+      DateTimeRange? r = await showDateRangePicker(
+        context: context,
+        firstDate: DateTime(DateTime.now().year, DateTime.now().month - 6),
+        lastDate: DateTime.now(),
+      );
+      if (r != null) {
+        setState(() {
+          _customStartDate = r.start;
+          _customEndDate = r.end;
+        });
+        _loadReportData();
+      }
     } else {
-      DateTime? p = await showDatePicker(context: context, initialDate: _referenceDate ?? DateTime.now(), firstDate: DateTime(DateTime.now().year - 1), lastDate: DateTime.now());
-      if (p != null) { setState(() => _referenceDate = p); _loadReportData(); }
+      DateTime? p = await showDatePicker(
+        context: context,
+        initialDate: _referenceDate ?? DateTime.now(),
+        firstDate: DateTime(DateTime.now().year - 1),
+        lastDate: DateTime.now(),
+      );
+      if (p != null) {
+        setState(() => _referenceDate = p);
+        _loadReportData();
+      }
     }
   }
 }
