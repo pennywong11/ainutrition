@@ -7,13 +7,15 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料�
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
+// 通知欄
+import 'notifications/notification_handler.dart';
+import 'notifications/notification_ui.dart';
+import 'notifications/notification_bell.dart';
 
 // 🟢 引入切換按鈕元件 (家庭共享功能)
 import '../widgets/family_switcher.dart';
 
-// ----------------------------------------------
 // 資料模型區(Models)：定義資料的樣子
-// ----------------------------------------------
 
 // 每個"食物"的資料結構
 class FoodItem {
@@ -511,7 +513,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             ? null
             : Text("正在檢視: $_targetName", style: const TextStyle(fontSize: 16)),
         actions: [
-          // 🟢 插入家庭切換器
+          // 1. 家庭切換器 (來自 familysetting0402)
           FamilySwitcher(
             currentName: _targetName,
             onSelected: (uid, name) {
@@ -524,7 +526,18 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               _listenToFirebaseData();
             },
           ),
-          // 🟢 報表圖示
+          
+          // 2. 通知鈴鐺 (來自 main 分支)
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: NotificationBell(
+              onPressed: () {
+                NotificationUI.showTodayNotifications(context);
+              },
+            ),
+          ),
+          
+          // 3. 週報月報按鈕
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: IconButton(
@@ -533,7 +546,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               tooltip: '週報月報',
             ),
           ),
-          // 設定圖示
+          
+          // 4. 設定圖示
           Padding(
             padding: const EdgeInsets.only(right: 15.0),
             child: IconButton(
