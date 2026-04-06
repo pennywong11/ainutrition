@@ -47,9 +47,6 @@ class NotificationHandler {
     }
     debugPrint("允許通知權限");
 
-    // 訂閱主題（可選）
-    FirebaseMessaging.instance.subscribeToTopic("all");
-
     // 取得 Token
     String? token;
     try {
