@@ -19,11 +19,7 @@ android {
     }
 
     kotlinOptions {
-<<<<<<< HEAD
-        jvmTarget = "17"
-=======
         jvmTarget = JavaVersion.VERSION_17.toString()
->>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
     }
 
     defaultConfig {
@@ -44,14 +40,6 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-<<<<<<< HEAD
-
-    // 新增這段：告訴 Android 不要壓縮 tflite 檔
-    aaptOptions {
-        noCompress.add("tflite")
-    }
-=======
->>>>>>> 56a3ad20673f8e350bca3f9c405a6b6b9e618cf6
 }
 
 flutter {

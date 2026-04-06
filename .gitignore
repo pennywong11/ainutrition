@@ -54,6 +54,7 @@ set_admin.py
 # Firebase 設定檔
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+
 lib/firebase_options.dart
 firebase.json
 
@@ -68,7 +69,6 @@ pubspec.lock
 # Android 特定
 android/local.properties
 android/**/GeneratedPluginRegistrant.java0
-
 # iOS 特定
 ios/Pods/
 ios/Runner.xcworkspace/

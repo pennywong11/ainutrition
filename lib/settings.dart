@@ -1,3 +1,4 @@
+// settings.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +12,9 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  //bool notifications = true;
+  //bool darkPreview = false;
+  //String preferredUnit = 'metric';
   final TextEditingController ageController = TextEditingController();
   final TextEditingController heightController = TextEditingController();
   final TextEditingController weightController = TextEditingController();
@@ -79,30 +83,26 @@ class _SettingsPageState extends State<SettingsPage> {
         weight = null;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已登出')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已登出')));
 
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            content: const Text('登出成功'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          content: const Text('登出成功'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('登出失敗：$e')));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('登出失敗：$e')));
     }
   }
 
@@ -146,18 +146,14 @@ class _SettingsPageState extends State<SettingsPage> {
     if (result == true) {
       try {
         await currentUser.delete();
-        if (mounted) {
-          Navigator.pushNamed(context, "/");
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text("帳號已註銷")));
-        }
+        Navigator.pushNamed(context, "/");
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("帳號已註銷")));
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text("註銷失敗：$e")));
-        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("註銷失敗：$e")));
       }
     }
   }
@@ -203,17 +199,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
     try {
       await currentUser!.sendEmailVerification();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("已寄出驗證信至：${currentUser.email}")));
-      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("已寄出驗證信至：${currentUser.email}")));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
     }
   }
 
@@ -260,17 +253,14 @@ class _SettingsPageState extends State<SettingsPage> {
       await FirebaseAuth.instance.sendPasswordResetEmail(
         email: currentUser!.email!,
       );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("已寄出密碼重設信至：${currentUser.email}")),
-        );
-      }
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("已寄出密碼重設信至：${currentUser.email}")));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("寄信失敗，請稍後再試")));
     }
   }
 
@@ -295,17 +285,13 @@ class _SettingsPageState extends State<SettingsPage> {
         'weight': weight,
       }, SetOptions(merge: true));
 
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('已儲存健康資料')));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已儲存健康資料')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('儲存失敗: $e')));
-      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('儲存失敗: $e')));
     }
   }
 
@@ -327,7 +313,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 builder: (context, snapshot) {
                   final user = snapshot.data;
                   final isLoggedIn = user != null && user.email != null;
-                  final isVerified = isLoggedIn && user.emailVerified;
+                  final isVertified = isLoggedIn && user.emailVerified;
 
                   return Container(
                     width: double.infinity,
@@ -368,7 +354,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                               ),
                               const SizedBox(height: 6),
-                              if (isVerified)
+                              if (isVertified)
                                 GestureDetector(
                                   onTap: _confirmResetPassword,
                                   child: Text(
@@ -379,11 +365,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                     ),
                                   ),
                                 ),
-                              if (isLoggedIn && !isVerified)
+                              if (isLoggedIn && !isVertified)
                                 GestureDetector(
                                   onTap: _confirmEmailVerification,
                                   child: Text(
-                                    '> 尚未完成電子郵件驗證，請檢查信箱，或點此重新寄送',
+                                    '> 尚未完成電子郵件驗證，請檢查您的信箱，或點擊此處重新寄送驗證信',
                                     style: TextStyle(
                                       color: cs.primary,
                                       fontWeight: FontWeight.w600,
@@ -478,7 +464,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r"[0-9.]")),
                       ],
-                      decoration: const InputDecoration(hintText: '請輸入身高'),
+                      decoration: InputDecoration(hintText: '請輸入身高'),
                       textInputAction: TextInputAction.next,
                       onChanged: (v) {
                         height = double.tryParse(v);
@@ -529,9 +515,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 stream: FirebaseAuth.instance.authStateChanges(),
                 builder: (context, snapshot) {
                   final user = snapshot.data;
-                  if (user == null || user.isAnonymous) {
+                  if (user == null || user.isAnonymous)
                     return const SizedBox.shrink();
-                  }
 
                   return Column(
                     children: [
@@ -558,6 +543,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ],
                         ),
                       ),
+
                       const SizedBox(height: 20),
                     ],
                   );
