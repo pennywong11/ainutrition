@@ -45,4 +45,3 @@ flutter:
   assets:
     - assets/data/nutrition.csv
     - .env
-

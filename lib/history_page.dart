@@ -526,7 +526,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               _listenToFirebaseData();
             },
           ),
-          
+
           // 2. 通知鈴鐺 (來自 main 分支)
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -536,7 +536,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               },
             ),
           ),
-          
+
           // 3. 週報月報按鈕
           Padding(
             padding: const EdgeInsets.only(right: 8.0),
@@ -546,7 +546,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               tooltip: '週報月報',
             ),
           ),
-          
+
           // 4. 設定圖示
           Padding(
             padding: const EdgeInsets.only(right: 15.0),
