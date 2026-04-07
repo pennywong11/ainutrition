@@ -5,7 +5,8 @@ import 'firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'app_theme.dart';
-
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'notifications/notification_handler.dart';
 // 全局變數，用於儲存當前登入的使用者資訊
 User? currentUser;
 
@@ -30,6 +31,12 @@ Future<void> _initializeAuth() async {
   }
 }
 
+// 背景訊息處理
+Future<void> _backgroundMessageHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint("背景收到訊息: ${message.data}");
+}
+
 Future<void> main() async {
   // 1. 確保 Widgets 繫結初始化，允許在 runApp 之前進行非同步操作
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +57,10 @@ Future<void> main() async {
 
   // 4. 初始化身份驗證 (確保在 App 運行前登入完成)
   await _initializeAuth();
+  // 5. 初始化通知處理器（包含 FCM 和本地通知）
+  await NotificationHandler.init();
+  // 註冊背景訊息 handler
+  FirebaseMessaging.onBackgroundMessage(_backgroundMessageHandler);
 
   //await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
   //final userCredential = await FirebaseAuth.instance.signInAnonymously();
