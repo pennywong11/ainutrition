@@ -357,7 +357,7 @@ class _RegisterPageState extends State<RegisterPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('註冊失敗：${msg}')));
+      ).showSnackBar(SnackBar(content: Text('註冊失敗：$msg')));
       debugPrint('註冊失敗：${e.code} - ${e.message}');
     }
   }
