@@ -2077,7 +2077,7 @@ class _ReportPageState extends State<ReportPage> {
             ingredients: [],
             remark: data['備註'] ?? '',
             aiSuggestion: data['AI分析建議'] ?? '',
-            mealType: data['meal_type'] ?? _getMealTypeByTime(itemDate),
+            mealType: data['meal_type'] ??'',
             createdAt: itemDate,
           ),
         );
