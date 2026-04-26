@@ -1,9 +1,6 @@
 // lib/auth.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'firebase_options.dart';
-import 'package:http/http.dart' as http;
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -97,7 +94,7 @@ class _LoginPageState extends State<LoginPage> {
                 Navigator.pop(context); // 關閉 dialog
                 Navigator.pushNamedAndRemoveUntil(
                   context,
-                  '/admin',
+                  '/',
                   (route) => false,
                 );
               },
@@ -151,7 +148,7 @@ class _LoginPageState extends State<LoginPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('登入失敗：$msg')));
-      print('登入失敗：${e.code} - ${e.message}');
+      debugPrint('登入失敗：${e.code} - ${e.message}');
     }
   }
 
@@ -341,14 +338,14 @@ class _RegisterPageState extends State<RegisterPage> {
       String msg = "";
 
       switch (e.code) {
-        case 'email-already-exists':
+        case 'email-already-in-use':
           msg = '您提供的電子郵件地址已被使用。請嘗試使用其他電子郵件。';
           break;
         case 'invalid-email':
           msg = '您輸入的電子郵件地址格式不正確。請檢查並重新輸入。';
           break;
-        case 'invalid-password':
-          msg = '密碼無效。密碼必須至少包含六個字元。';
+        case 'password-does-not-meet-requirements':
+          msg = '密碼無效。密碼必須至少包含六個字元，且必須包含大小寫字母和數字。';
           break;
         case 'insufficient-permission':
           msg = '您的帳戶沒有足夠的權限執行此操作。';
@@ -360,8 +357,8 @@ class _RegisterPageState extends State<RegisterPage> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('註冊失敗：${e.message}')));
-      print('註冊失敗：${e.code} - ${e.message}');
+      ).showSnackBar(SnackBar(content: Text('註冊失敗：$msg')));
+      debugPrint('註冊失敗：${e.code} - ${e.message}');
     }
   }
 

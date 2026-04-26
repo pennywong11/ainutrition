@@ -1309,13 +1309,6 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
         totalFat += ingredient.fat;
       }
     }
-    // 2. 將計算結果更新到所有的 Controller 中
-    // 使用 toStringAsFixed(1) 保持美觀，熱量通常用整數 (0)
-    _gramController.text = totalGrams.toStringAsFixed(1);
-    _calController.text = totalCalories.toStringAsFixed(0);
-    _proteinController.text = totalProtein.toStringAsFixed(1);
-    _carbController.text = totalCarbs.toStringAsFixed(1);
-    _fatController.text = totalFat.toStringAsFixed(1);
   }
 
   @override
@@ -2374,108 +2367,7 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const SizedBox(height: cardSpacing),
 
-                      // 3. 第三格欄位內容(熱量攝取 Top 3)：
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '熱量攝取排行',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (_periodFoodList.isNotEmpty) ...[
-                                // 先將食物清單依照熱量由高到低排序，並取前三名
-                                ...(() {
-                                  List<FoodItem> topFoods = List.from(_periodFoodList);
-                                  topFoods.sort((a, b) {
-                                    double calA = double.tryParse(a.calories.replaceAll(' 大卡', '')) ?? 0;
-                                    double calB = double.tryParse(b.calories.replaceAll(' 大卡', '')) ?? 0;
-                                    return calB.compareTo(calA);
-                                  });
-                                  return topFoods.take(3);
-                                })().toList().asMap().entries.map((entry) {
-                                  int index = entry.key;
-                                  FoodItem item = entry.value;
-
-                                  // 定義前三名的顏色
-                                  final List<Color> rankColors = [
-                                    const Color(0xFFE96A60), // 第一名 紅
-                                    const Color(0xFFF5BE76), // 第二名 橘
-                                    const Color(0xFFA5C5C2), // 第三名 藍綠
-                                  ];
-
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12.0),
-                                    child: Row(
-                                      children: [
-                                        // 1. 圓圈序號
-                                        Container(
-                                          width: 28,
-                                          height: 28,
-                                          decoration: BoxDecoration(
-                                            color: rankColors[index],
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              '${index + 1}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        // 2. 食物名稱
-                                        Expanded(
-                                          child: Text(
-                                            item.name,
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        // 3. 熱量數值
-                                        Text(
-                                          item.calories,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.grey[800],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                              ] else
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 20),
-                                    child: Text("本期尚無餐點紀錄", style: TextStyle(color: Colors.grey)),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: cardSpacing),
-                
-                      // 4. 第四格欄位內容(AI 營養觀察與建議)
+                      // 3. 第三格欄位內容(AI 營養觀察與建議)
                       if (_reportData != null)
                         Card(
                           elevation: 4,
@@ -2521,7 +2413,7 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                       const SizedBox(height: cardSpacing),
 
-                      // 5. 第五格欄位內容(餐點紀錄)：將每筆在此範圍內的食物都列出
+                      // 4. 第四格欄位內容(餐點紀錄)：將每筆在此範圍內的食物都列出
                       Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(
