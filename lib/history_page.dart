@@ -1299,14 +1299,23 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     double totalCarbs = 0;
     double totalFat = 0;
 
+    // 1. 只計算那些沒有被標記為 isDeleted 的食材
     for (final ingredient in _ingredients) {
-      if (ingredient.isDeleted) continue;
-      totalGrams += ingredient.grams;
-      totalCalories += ingredient.calories;
-      totalProtein += ingredient.protein;
-      totalCarbs += ingredient.carbs;
-      totalFat += ingredient.fat;
+      if (!ingredient.isDeleted) {
+        totalGrams += ingredient.grams;
+        totalCalories += ingredient.calories;
+        totalProtein += ingredient.protein;
+        totalCarbs += ingredient.carbs;
+        totalFat += ingredient.fat;
+      }
     }
+    // 2. 將計算結果更新到所有的 Controller 中
+    // 使用 toStringAsFixed(1) 保持美觀，熱量通常用整數 (0)
+    _gramController.text = totalGrams.toStringAsFixed(1);
+    _calController.text = totalCalories.toStringAsFixed(0);
+    _proteinController.text = totalProtein.toStringAsFixed(1);
+    _carbController.text = totalCarbs.toStringAsFixed(1);
+    _fatController.text = totalFat.toStringAsFixed(1);
   }
 
   @override
@@ -1464,8 +1473,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   ),
                   onPressed: () {
                     setState(() {
+                      // 切換狀態
                       ingredient.isDeleted = !ingredient.isDeleted;
-
+                      
+                      // 管理待刪除清單
                       if (ingredient.id != null) {
                         if (ingredient.isDeleted) {
                           _ingredientsToDelete.add(ingredient.id!);
@@ -1473,6 +1484,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                           _ingredientsToDelete.remove(ingredient.id!);
                         }
                       }
+                      // 重新計算並更新總數值
                       _calculateTotals();
                     });
                   },
@@ -1949,7 +1961,7 @@ class _ReportPageState extends State<ReportPage> {
 
   // 1. AI 建議生成邏輯(會根據這週/這月/這範圍所吃的熱量平均值去決定在此區顯示哪段文字)
   String _generateAIFeedback(double avgCal, double p, double c, double f) {
-    if (avgCal == 0) return "目前尚無足夠數據。開始記錄餐點，AI 將為您分析飲食趨勢！";
+    if (avgCal == 0) return "目前尚無數據。開始記錄餐點，AI 將為您分析飲食趨勢！";
 
     List<String> suggestions = [];
 
@@ -1958,7 +1970,7 @@ class _ReportPageState extends State<ReportPage> {
         "⚠️ 本期平均熱量攝取較高 (${avgCal.toStringAsFixed(0)} kcal)，建議控制精緻澱粉份量並增加活動量。",
       );
     } else if (avgCal < 1200 && avgCal > 0) {
-      suggestions.add("ℹ️ 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。");
+      suggestions.add("⚠️ 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。");
     } else {
       suggestions.add(
         "✅ 平均攝取熱量穩定 (${avgCal.toStringAsFixed(0)} kcal)，請繼續保持良好習慣！",
@@ -2262,7 +2274,7 @@ class _ReportPageState extends State<ReportPage> {
                                       '總餐數',
                                       '${_reportData?.totalMeals}',
                                       Icons.restaurant,
-                                      Colors.blue,
+                                      Colors.deepPurple,
                                     ),
                                   ),
                                   Expanded(
@@ -2278,7 +2290,7 @@ class _ReportPageState extends State<ReportPage> {
                                       '總熱量',
                                       '${_reportData?.totalCalories.toStringAsFixed(0)} kcal',
                                       Icons.local_fire_department,
-                                      Colors.orange,
+                                      Colors.redAccent,
                                     ),
                                   ),
                                 ],
@@ -2290,7 +2302,7 @@ class _ReportPageState extends State<ReportPage> {
                                     child: _buildSummaryItem(
                                       '蛋白質',
                                       '${_reportData?.totalProtein.toStringAsFixed(1)} g',
-                                      Icons.restaurant_menu,
+                                      Icons.egg,
                                       const Color.fromARGB(255, 117, 181, 233),
                                     ),
                                   ),
@@ -2362,7 +2374,108 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const SizedBox(height: cardSpacing),
 
-                      // 3. 第三格欄位內容(AI 營養觀察與建議)
+                      // 3. 第三格欄位內容(熱量攝取 Top 3)：
+                      Card(
+                        elevation: 4,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '熱量攝取排行',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              if (_periodFoodList.isNotEmpty) ...[
+                                // 先將食物清單依照熱量由高到低排序，並取前三名
+                                ...(() {
+                                  List<FoodItem> topFoods = List.from(_periodFoodList);
+                                  topFoods.sort((a, b) {
+                                    double calA = double.tryParse(a.calories.replaceAll(' 大卡', '')) ?? 0;
+                                    double calB = double.tryParse(b.calories.replaceAll(' 大卡', '')) ?? 0;
+                                    return calB.compareTo(calA);
+                                  });
+                                  return topFoods.take(3);
+                                })().toList().asMap().entries.map((entry) {
+                                  int index = entry.key;
+                                  FoodItem item = entry.value;
+
+                                  // 定義前三名的顏色
+                                  final List<Color> rankColors = [
+                                    const Color(0xFFE96A60), // 第一名 紅
+                                    const Color(0xFFF5BE76), // 第二名 橘
+                                    const Color(0xFFA5C5C2), // 第三名 藍綠
+                                  ];
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12.0),
+                                    child: Row(
+                                      children: [
+                                        // 1. 圓圈序號
+                                        Container(
+                                          width: 28,
+                                          height: 28,
+                                          decoration: BoxDecoration(
+                                            color: rankColors[index],
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              '${index + 1}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        // 2. 食物名稱
+                                        Expanded(
+                                          child: Text(
+                                            item.name,
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        // 3. 熱量數值
+                                        Text(
+                                          item.calories,
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey[800],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ] else
+                                const Center(
+                                  child: Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 20),
+                                    child: Text("本期尚無餐點紀錄", style: TextStyle(color: Colors.grey)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: cardSpacing),
+                
+                      // 4. 第四格欄位內容(AI 營養觀察與建議)
                       if (_reportData != null)
                         Card(
                           elevation: 4,
@@ -2397,7 +2510,7 @@ class _ReportPageState extends State<ReportPage> {
                                 Text(
                                   _reportData!.aiFeedback,
                                   style: const TextStyle(
-                                    fontSize: 15,
+                                    fontSize: 16,
                                     height: 1.6,
                                     color: Colors.black87,
                                   ),
@@ -2408,7 +2521,7 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                       const SizedBox(height: cardSpacing),
 
-                      // 4. 第四格欄位內容(餐點紀錄)：將每筆在此範圍內的食物都列出
+                      // 5. 第五格欄位內容(餐點紀錄)：將每筆在此範圍內的食物都列出
                       Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(
@@ -2435,7 +2548,7 @@ class _ReportPageState extends State<ReportPage> {
                                           const NeverScrollableScrollPhysics(),
                                       itemCount: _periodFoodList.length,
                                       separatorBuilder: (c, i) =>
-                                          const SizedBox(height: 8),
+                                          const SizedBox(height: 12),
                                       itemBuilder: (context, index) {
                                         final item = _periodFoodList[index];
                                         return Row(
@@ -2450,29 +2563,33 @@ class _ReportPageState extends State<ReportPage> {
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.start,
                                                 children: [
+                                                  // 1. 餐點名稱
                                                   Text(
                                                     item.name,
                                                     style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
+                                                      fontSize: 16,
+                                                      fontWeight:FontWeight.bold,
                                                     ),
                                                   ),
+                                                  // 2. 日期與餐點時段
                                                   Text(
                                                     '${_formatDate(item.createdAt!)} • ${item.mealType}',
                                                     style: TextStyle(
-                                                      fontSize: 12,
+                                                      fontSize: 16,
                                                       color: Colors.grey[600],
                                                     ),
                                                   ),
                                                 ],
                                               ),
                                             ),
+                                            // 3. 熱量數值
                                             Container(
                                               alignment: Alignment.bottomRight,
                                               height: 40,
                                               child: Text(
                                                 item.calories,
                                                 style: const TextStyle(
+                                                  fontSize: 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
