@@ -506,8 +506,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-        elevation: 0,
         // 🟢 修改標題：顯示目前正在看誰
         title: _targetName == "我自己"
             ? null
@@ -543,7 +541,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             child: IconButton(
               onPressed: _openReportPage,
               icon: const Icon(Icons.bar_chart),
-              tooltip: '週報月報',
+              // tooltip: '週報月報',
             ),
           ),
 
@@ -2125,18 +2123,11 @@ class _ReportPageState extends State<ReportPage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-        elevation: 0,
         title: const Text(
           '營養報告',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
+          preferredSize: const Size.fromHeight(kTextTabBarHeight),
           child: Container(
             color: Colors.white,
             child: Row(
