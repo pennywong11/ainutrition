@@ -17,7 +17,7 @@ import '../widgets/family_switcher.dart';
 
 // 資料模型區(Models)：定義資料的樣子
 
-// 每個"食物"的資料結構
+// 每個"食物"的資料結構：食物名稱、熱量、圖片、蛋白質等等欄位
 class FoodItem {
   String id;
   DocumentReference? reference;
@@ -32,7 +32,7 @@ class FoodItem {
   String remark;
   String aiSuggestion;
   String mealType;
-  DateTime? createdAt; // 新增：建立時間
+  DateTime? createdAt; // 新增"建立時間"
 
   FoodItem({
     this.reference,
@@ -84,7 +84,7 @@ class Ingredient {
       protein: this.protein,
       fat: this.fat,
     );
-    // 複製目前的刪除狀態 (通常初始是 false)
+    // 複製目前的刪除狀態 (通常初始是 false )
     newIngredient.isDeleted = this.isDeleted;
     return newIngredient;
   }
@@ -98,7 +98,7 @@ class _DailyTotals {
   double fat = 0;
 }
 
-// 報表數據結構
+// 報表數據結構：定義"報表"需要顯示的總和數據
 class ReportData {
   final String period;
   final double totalCalories;
@@ -270,8 +270,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         _checkUserDataStatus();
       }
     });
-
-    _checkLoginAndListen();
   }
 
   Future<void> _checkLoginAndListen() async {
@@ -285,7 +283,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       }
     }
   }
-
+  // 監聽 Firebase(即時抓取資料)
   void _listenToFirebaseData() {
     _foodSubscription?.cancel();
 
@@ -504,6 +502,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // 主頁頂端橫列
       appBar: AppBar(
         automaticallyImplyLeading: false,
         // 🟢 修改標題：顯示目前正在看誰
@@ -545,7 +544,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             ),
           ),
 
-          // 4. 設定圖示
+          // 4. 設定按鈕
           Padding(
             padding: const EdgeInsets.only(right: 15.0),
             child: IconButton(
@@ -750,6 +749,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
+                    // 左邊儀表板：圓餅圖(算蛋白質、脂質、碳水化合物熱量各的占比占總熱量的%數)
                     PieChart(
                       PieChartData(
                         sectionsSpace: 0,
@@ -967,7 +967,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       ),
     );
   }
-
+  // 左側儀表板：進度條工具(會呼叫4次，印出紅、藍、綠、橘色四條進度條)
   Widget _buildNutrientBar(
     String label,
     Color color,
@@ -991,7 +991,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: LinearProgressIndicator(
-                  value: percentage,
+                  value: percentage, // 長度
                   minHeight: 15,
                   backgroundColor: Colors.grey[300],
                   color: color,
@@ -1034,6 +1034,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 ? const Center(child: CircularProgressIndicator())
                 : _foodList.isEmpty
                 ? const Center(child: Text("目前尚無餐點分析紀錄！"))
+                // 如果有10筆資料，就會將10個資料欄位整齊排在右側
                 : ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -1135,7 +1136,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: Row(
+        // 資料(食物)欄位的細節
+        child:Row(
           children: [
             // 如果 mealType 有值 (且不是空字串)，就顯示 Icon
             if (item.mealType.isNotEmpty) _getMealIcon(item.mealType),
@@ -1153,6 +1155,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 顯示此食物
                   Text(
                     item.name,
                     style: const TextStyle(
@@ -1174,6 +1177,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             if (!isViewingOthers)
               SizedBox(
                 width: 40,
+                // 資料(食物)欄位右側的垃圾桶按鈕
                 child: IconButton(
                   icon: const Icon(
                     Icons.delete_outline,
@@ -1293,25 +1297,22 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     double totalCarbs = 0;
     double totalFat = 0;
 
+    // 1. 只計算那些沒有被標記為 isDeleted 的食材
     for (final ingredient in _ingredients) {
-      if (ingredient.isDeleted) continue;
-      totalGrams += ingredient.grams;
-      totalCalories += ingredient.calories;
-      totalProtein += ingredient.protein;
-      totalCarbs += ingredient.carbs;
-      totalFat += ingredient.fat;
+      if (!ingredient.isDeleted) {
+        totalGrams += ingredient.grams;
+        totalCalories += ingredient.calories;
+        totalProtein += ingredient.protein;
+        totalCarbs += ingredient.carbs;
+        totalFat += ingredient.fat;
+      }
     }
-
-    _gramController.text = totalGrams.toStringAsFixed(1);
-    _calController.text = totalCalories.toStringAsFixed(0);
-    _proteinController.text = totalProtein.toStringAsFixed(1);
-    _carbController.text = totalCarbs.toStringAsFixed(1);
-    _fatController.text = totalFat.toStringAsFixed(1);
   }
 
   @override
   void initState() {
     super.initState();
+    // 點擊資料(食物)欄位時會跳出視窗，將此食物裡的所有食材等顯示出來
     _nameController = TextEditingController(text: widget.item.name);
     _gramController = TextEditingController();
     _calController = TextEditingController();
@@ -1452,6 +1453,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                 IconButton(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
+                  // 處理視窗中顯示的食材旁邊的"紅色減號按鈕"
+                  // 當點擊此按鈕，這筆食材會返灰，視窗上方的總熱量、克數等數值會立即更新
                   icon: Icon(
                     isDeleted
                         ? Icons.add_circle_outline
@@ -1461,8 +1464,10 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   ),
                   onPressed: () {
                     setState(() {
+                      // 切換狀態
                       ingredient.isDeleted = !ingredient.isDeleted;
-
+                      
+                      // 管理待刪除清單
                       if (ingredient.id != null) {
                         if (ingredient.isDeleted) {
                           _ingredientsToDelete.add(ingredient.id!);
@@ -1470,6 +1475,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                           _ingredientsToDelete.remove(ingredient.id!);
                         }
                       }
+                      // 重新計算並更新總數值
                       _calculateTotals();
                     });
                   },
@@ -1492,19 +1498,19 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
                   _buildMacroInfo(
                     Icons.circle,
                     const Color.fromARGB(255, 117, 181, 233),
-                    ingredient.protein,
+                    ingredient.protein, // 蛋白質(藍色圓點)
                   ),
                   const SizedBox(width: 16),
                   _buildMacroInfo(
                     Icons.circle,
                     const Color.fromARGB(255, 132, 202, 206),
-                    ingredient.carbs,
+                    ingredient.carbs, // 碳水化合物(綠色圓點)
                   ),
                   const SizedBox(width: 16),
                   _buildMacroInfo(
                     Icons.circle,
                     const Color.fromARGB(255, 245, 190, 118),
-                    ingredient.fat,
+                    ingredient.fat, // 脂質(橘色圓點)
                   ),
                 ],
               ),
@@ -1775,7 +1781,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             ],
           ),
           const SizedBox(height: 24),
-
+          // (1) AI 總結食材清單
           const Text(
             'AI 總結食材清單',
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
@@ -1790,13 +1796,13 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
               return _buildIngredientRow(_ingredients[index], index);
             },
           ),
-
+          // (2) AI 分析建議
           const Text(
-            'AI分析建議',
+            'AI 分析建議',
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
           ),
           const SizedBox(height: 8),
-
+          // 為一灰底黑框的建議文字欄位區(僅輸出AI判讀，不可手動修改)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
@@ -1817,7 +1823,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             ),
           ),
           const SizedBox(height: 24),
-
+          // (3) 備註
           const Text(
             '備註',
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
@@ -1909,6 +1915,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 // 週報月報頁面
 // ----------------------------------------------
 
+// 分類標籤：週報/月報/自訂範圍(在後面做切換)
 enum ReportType { weekly, monthly, custom }
 
 class ReportPage extends StatefulWidget {
@@ -1926,10 +1933,10 @@ class ReportPage extends StatefulWidget {
 }
 
 class _ReportPageState extends State<ReportPage> {
-  ReportType _selectedReportType = ReportType.weekly;
-  bool _isLoading = true;
+  ReportType _selectedReportType = ReportType.weekly; // 預設為週報
+  bool _isLoading = true; //是否正在跑(轉圈圈)
   ReportData? _reportData;
-  List<FoodItem> _periodFoodList = [];
+  List<FoodItem> _periodFoodList = []; // 用來裝這段時間的所有食物清單
 
   DateTime? _customStartDate;
   DateTime? _customEndDate;
@@ -1943,9 +1950,9 @@ class _ReportPageState extends State<ReportPage> {
     _loadReportData();
   }
 
-  // --- 1. AI 建議生成邏輯 ---
+  // 1. AI 建議生成邏輯(會根據這週/這月/這範圍所吃的熱量平均值去決定在此區顯示哪段文字)
   String _generateAIFeedback(double avgCal, double p, double c, double f) {
-    if (avgCal == 0) return "目前尚無足夠數據。開始記錄餐點，AI 將為您分析飲食趨勢！";
+    if (avgCal == 0) return "目前尚無數據。開始記錄餐點，AI 將為您分析飲食趨勢！";
 
     List<String> suggestions = [];
 
@@ -1954,13 +1961,13 @@ class _ReportPageState extends State<ReportPage> {
         "⚠️ 本期平均熱量攝取較高 (${avgCal.toStringAsFixed(0)} kcal)，建議控制精緻澱粉份量並增加活動量。",
       );
     } else if (avgCal < 1200 && avgCal > 0) {
-      suggestions.add("ℹ️ 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。");
+      suggestions.add("⚠️ 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。");
     } else {
       suggestions.add(
         "✅ 平均攝取熱量穩定 (${avgCal.toStringAsFixed(0)} kcal)，請繼續保持良好習慣！",
       );
     }
-
+    // 根據營養學比例給予適當建議並顯示在對應畫面中
     double totalMacroCal = (p * 4) + (c * 4) + (f * 9);
     if (totalMacroCal > 0) {
       if ((p * 4) / totalMacroCal < 0.15)
@@ -1975,14 +1982,17 @@ class _ReportPageState extends State<ReportPage> {
     return suggestions.join("\n");
   }
 
-  // --- 2. 資料載入邏輯 ---
+  // 2. 資料載入邏輯
   Future<void> _loadReportData() async {
     setState(() => _isLoading = true);
     try {
       DateTime now = DateTime.now();
       DateTime startDate;
       DateTime endDate = now;
-
+      // 計算"這張報表要從哪天抓取到哪天"的範圍
+      // 週報：這週一至周日總共七天
+      // 月報：這整個月
+      // 自訂範圍：最短2天、最多6個月
       switch (_selectedReportType) {
         case ReportType.weekly:
           startDate = _getWeekStartDate(_referenceDate ?? now);
@@ -2020,7 +2030,7 @@ class _ReportPageState extends State<ReportPage> {
         59,
         999,
       );
-
+      // 到Firebase撈取資料
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(widget.userId)
@@ -2044,16 +2054,12 @@ class _ReportPageState extends State<ReportPage> {
           itemDate.month,
           itemDate.day,
         );
-        double mCal = 0, mP = 0, mC = 0, mF = 0, mW = 0;
-        var ingSnapshot = await doc.reference.collection('ingredients').get();
-        for (var ingDoc in ingSnapshot.docs) {
-          var ing = ingDoc.data();
-          mCal += _parseToDouble(ing['熱量(kcal)']);
-          mP += _parseToDouble(ing['蛋白質(g)']);
-          mC += _parseToDouble(ing['碳水化合物(g)']);
-          mF += _parseToDouble(ing['脂肪(g)']);
-          mW += _parseToDouble(ing['重量(g)']);
-        }
+        // 直接讀取已經算好的總數，速度快很多！
+        double mCal = _parseToDouble(data['total_calories']);
+        double mP = _parseToDouble(data['total_protein']);
+        double mC = _parseToDouble(data['total_carbs']);
+        double mF = _parseToDouble(data['total_fat']);
+        double mW = _parseToDouble(data['total_weight']);
         dailyCalories[dateKey] = (dailyCalories[dateKey] ?? 0) + mCal;
         tCal += mCal;
         tP += mP;
@@ -2074,7 +2080,7 @@ class _ReportPageState extends State<ReportPage> {
             ingredients: [],
             remark: data['備註'] ?? '',
             aiSuggestion: data['AI分析建議'] ?? '',
-            mealType: data['meal_type'] ?? _getMealTypeByTime(itemDate),
+            mealType: data['meal_type'] ??'',
             createdAt: itemDate,
           ),
         );
@@ -2116,12 +2122,13 @@ class _ReportPageState extends State<ReportPage> {
     }
   }
 
-  // --- 3. UI 構建 ---
+  // 3. UI 構建
   @override
   Widget build(BuildContext context) {
     const double cardSpacing = 16.0;
 
     return Scaffold(
+      // 報表頁面的頂部標題列
       appBar: AppBar(
         title: const Text(
           '營養報告',
@@ -2132,6 +2139,7 @@ class _ReportPageState extends State<ReportPage> {
             color: Colors.white,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              // 報表頁面：切換週報/月報/自訂範圍選單(同一橫排)
               children: [
                 _buildReportTypeButton(
                   '週報',
@@ -2153,6 +2161,7 @@ class _ReportPageState extends State<ReportPage> {
           ),
         ),
       ),
+      // 1. 第一格欄位內容(左上角的"營養摘要"、右上角的"灰色日期按鈕")
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -2240,6 +2249,7 @@ class _ReportPageState extends State<ReportPage> {
                                   ),
                                 ],
                               ),
+                              // 營養摘要欄位框中的六個圖標
                               const SizedBox(height: 20),
                               Row(
                                 children: [
@@ -2248,7 +2258,7 @@ class _ReportPageState extends State<ReportPage> {
                                       '總餐數',
                                       '${_reportData?.totalMeals}',
                                       Icons.restaurant,
-                                      Colors.blue,
+                                      Colors.deepPurple,
                                     ),
                                   ),
                                   Expanded(
@@ -2264,7 +2274,7 @@ class _ReportPageState extends State<ReportPage> {
                                       '總熱量',
                                       '${_reportData?.totalCalories.toStringAsFixed(0)} kcal',
                                       Icons.local_fire_department,
-                                      Colors.orange,
+                                      Colors.redAccent,
                                     ),
                                   ),
                                 ],
@@ -2276,7 +2286,7 @@ class _ReportPageState extends State<ReportPage> {
                                     child: _buildSummaryItem(
                                       '蛋白質',
                                       '${_reportData?.totalProtein.toStringAsFixed(1)} g',
-                                      Icons.restaurant_menu,
+                                      Icons.egg,
                                       const Color.fromARGB(255, 117, 181, 233),
                                     ),
                                   ),
@@ -2304,7 +2314,7 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const SizedBox(height: cardSpacing),
 
-                      // --- 2. 每日平均卡片 ---
+                      // 2. 第二格欄位內容(每日平均攝取量)：總和/天數=平均值
                       Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(
@@ -2348,11 +2358,11 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                       const SizedBox(height: cardSpacing),
 
-                      // --- 3. AI 建議卡片 ---
+                      // 3. 第三格欄位內容(AI 營養觀察與建議)
                       if (_reportData != null)
                         Card(
                           elevation: 4,
-                          color: const Color(0xFFF1F8F7),
+                          color: const Color(0xFFF1F8F7), //淺綠色背景
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -2364,7 +2374,7 @@ class _ReportPageState extends State<ReportPage> {
                                 Row(
                                   children: [
                                     Icon(
-                                      Icons.auto_awesome,
+                                      Icons.auto_awesome, // 星星圖示
                                       color: Colors.teal[600],
                                       size: 22,
                                     ),
@@ -2383,7 +2393,7 @@ class _ReportPageState extends State<ReportPage> {
                                 Text(
                                   _reportData!.aiFeedback,
                                   style: const TextStyle(
-                                    fontSize: 15,
+                                    fontSize: 16,
                                     height: 1.6,
                                     color: Colors.black87,
                                   ),
@@ -2394,7 +2404,7 @@ class _ReportPageState extends State<ReportPage> {
                         ),
                       const SizedBox(height: cardSpacing),
 
-                      // --- 4. 餐點紀錄卡片 ---
+                      // 4. 第四格欄位內容(餐點紀錄)：將每筆在此範圍內的食物都列出
                       Card(
                         elevation: 4,
                         shape: RoundedRectangleBorder(
@@ -2421,7 +2431,7 @@ class _ReportPageState extends State<ReportPage> {
                                           const NeverScrollableScrollPhysics(),
                                       itemCount: _periodFoodList.length,
                                       separatorBuilder: (c, i) =>
-                                          const SizedBox(height: 8),
+                                          const SizedBox(height: 12),
                                       itemBuilder: (context, index) {
                                         final item = _periodFoodList[index];
                                         return Row(
@@ -2436,29 +2446,33 @@ class _ReportPageState extends State<ReportPage> {
                                                 crossAxisAlignment:
                                                     CrossAxisAlignment.start,
                                                 children: [
+                                                  // 1. 餐點名稱
                                                   Text(
                                                     item.name,
                                                     style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
+                                                      fontSize: 16,
+                                                      fontWeight:FontWeight.bold,
                                                     ),
                                                   ),
+                                                  // 2. 日期與餐點時段
                                                   Text(
                                                     '${_formatDate(item.createdAt!)} • ${item.mealType}',
                                                     style: TextStyle(
-                                                      fontSize: 12,
+                                                      fontSize: 16,
                                                       color: Colors.grey[600],
                                                     ),
                                                   ),
                                                 ],
                                               ),
                                             ),
+                                            // 3. 熱量數值
                                             Container(
                                               alignment: Alignment.bottomRight,
                                               height: 40,
                                               child: Text(
                                                 item.calories,
                                                 style: const TextStyle(
+                                                  fontSize: 16,
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -2479,7 +2493,7 @@ class _ReportPageState extends State<ReportPage> {
     );
   }
 
-  // --- 4. 輔助方法 ---
+  // 輔助小工具
   Widget _buildAvgColumn(String value, String label, Color color) {
     return Expanded(
       child: Column(
@@ -2513,16 +2527,7 @@ class _ReportPageState extends State<ReportPage> {
             : '自訂範圍';
     }
   }
-
-  String _getMealTypeByTime(DateTime time) {
-    int h = time.hour;
-    if (h >= 5 && h < 11) return '早餐';
-    if (h >= 11 && h < 14) return '午餐';
-    if (h >= 14 && h < 17) return '點心';
-    if (h >= 17 && h < 21) return '晚餐';
-    return '點心';
-  }
-
+  
   Widget _buildFoodImage(String path, String mealType) {
     if (path.startsWith('data:image') ||
         (path.length > 1000 && !path.startsWith('http'))) {

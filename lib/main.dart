@@ -8,7 +8,6 @@ import 'app_theme.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notifications/notification_handler.dart';
 import 'widget_handler.dart';
-import 'package:provider/provider.dart';
 
 // 全局變數，用於儲存當前登入的使用者資訊
 User? currentUser;
@@ -77,6 +76,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    WidgetHandler.checkInitialRoute(); // 檢查是否有初始路由需要跳轉
     return MaterialApp(
       title: 'aiNutrition',
       theme: AppTheme.theme,
