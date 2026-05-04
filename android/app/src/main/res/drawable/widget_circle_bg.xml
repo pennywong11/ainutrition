@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval"> <!-- 這裡設為 oval 就是圓形，設為 rectangle 則是矩形 -->
+    <solid android:color="#9DC6C2" /> <!-- 健康綠色 -->
+    <size android:width="48dp" android:height="48dp" />
+</shape>
