@@ -1,4 +1,4 @@
-package com.example.com.example.nutrition
+package com.example.nutrition
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.widget.RemoteViews
 import android.content.Intent
-import com.example.nutrition.R
 
 /**
  * Implementation of App Widget functionality.
