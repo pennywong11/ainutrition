@@ -1,7 +1,9 @@
+import 'dart:async';
+import 'dart:ui';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // 用於複製到剪貼簿
-import 'package:share_plus/share_plus.dart'; // 🟢 引入分享套件
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../services/family_service.dart';
 
@@ -16,16 +18,52 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
   final FamilyService _familyService = FamilyService();
   final TextEditingController _codeController = TextEditingController();
 
+  // 🟢 您選取的變數：控制 UI 狀態與倒數
   String? _generatedCode;
   bool _isLoading = false;
+  Timer? _countdownTimer;
+  int _secondsRemaining = 600; // 10 分鐘倒數
 
   @override
   void dispose() {
     _codeController.dispose();
+    _countdownTimer?.cancel(); // 銷毀頁面時務必停止計時器
     super.dispose();
   }
 
-  // 1. 產生邀請碼
+  // 🟢 自動銷毀邏輯 (UI 層級)
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    setState(() {
+      _secondsRemaining = 600;
+    });
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_secondsRemaining > 0) {
+        setState(() {
+          _secondsRemaining--;
+        });
+      } else {
+        _countdownTimer?.cancel();
+        setState(() {
+          _generatedCode = null; // 倒數結束，UI 上「銷毀」代碼
+        });
+        // 提示使用者代碼已過期
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("邀請碼已過期，請重新產生")));
+        }
+      }
+    });
+  }
+
+  String _formatTime(int totalSeconds) {
+    int minutes = totalSeconds ~/ 60;
+    int seconds = totalSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _handleGenerateCode() async {
     setState(() => _isLoading = true);
     try {
@@ -33,6 +71,7 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
       setState(() {
         _generatedCode = code;
       });
+      _startCountdown();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -43,24 +82,17 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
     }
   }
 
-  // 🟢 1-2. 分享邀請碼 (傳送給家人)
   void _shareCode() {
     if (_generatedCode == null) return;
-
     final String shareText =
         '''
 哈囉！邀請您加入我的飲食紀錄家庭共享 🍎
 我的專屬邀請碼是：【$_generatedCode】
-
-請在 App 的『家庭共享設定』中輸入此代碼，就可以隨時關心我的健康飲食狀況囉！
-(代碼有效期限為 10 分鐘)
+(有效剩餘時間：${_formatTime(_secondsRemaining)})
 ''';
-
-    // 呼叫系統分享面板
     Share.share(shareText);
   }
 
-  // 2. 輸入邀請碼加入
   Future<void> _handleJoinFamily() async {
     final code = _codeController.text.trim();
     if (code.isEmpty || code.length != 4) {
@@ -69,31 +101,12 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
       ).showSnackBar(const SnackBar(content: Text("請輸入 4 位數邀請碼")));
       return;
     }
-
     setState(() => _isLoading = true);
-    FocusScope.of(context).unfocus();
-
     try {
       final result = await _familyService.joinFamily(code);
       if (result['success'] == true) {
         if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text("🎉 加入成功！"),
-            content: Text(
-              "您現在可以查看 ${result['targetName']} 的飲食紀錄了。\n請至首頁左上角切換視角。",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                },
-                child: const Text("太棒了"),
-              ),
-            ],
-          ),
-        );
+        _showJoinSuccessDialog(result['targetName']);
         _codeController.clear();
       }
     } catch (e) {
@@ -106,45 +119,20 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
     }
   }
 
-  // 🟢 3. 解除綁定 (移除家人)
-  Future<void> _handleUnbind(Map<String, dynamic> member) async {
-    bool confirm =
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text("解除綁定"),
-            content: Text("確定要移除「${member['name']}」嗎？\n移除後您將無法再查看對方的紀錄。"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text("取消", style: TextStyle(color: Colors.grey)),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text("移除", style: TextStyle(color: Colors.red)),
-              ),
-            ],
+  void _showJoinSuccessDialog(String targetName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("🎉 加入成功！"),
+        content: Text("您現在可以查看 $targetName 的飲食紀錄了。"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("太棒了"),
           ),
-        ) ??
-        false;
-
-    if (!confirm) return;
-
-    setState(() => _isLoading = true);
-    try {
-      await _familyService.unbindFamily(member);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("已成功解除綁定")));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("移除失敗: $e")));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+        ],
+      ),
+    );
   }
 
   @override
@@ -157,13 +145,6 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              "您可以透過邀請碼與家人連結，互相查看飲食紀錄。",
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-
-            // 🟢 新增區塊：已連結的家人列表 (即時監聽)
-            const Text(
               "📋 已連結的家人",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -171,229 +152,264 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
             StreamBuilder<DocumentSnapshot>(
               stream: _familyService.getMyFamilyList(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
-                }
-
                 final userData = snapshot.data?.data() as Map<String, dynamic>?;
                 final List<dynamic> watchingList =
                     userData?['watching_list'] ?? [];
-
-                if (watchingList.isEmpty) {
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      "目前沒有連結任何家人",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  );
-                }
-
+                if (watchingList.isEmpty) return _buildEmptyList();
                 return ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: watchingList.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final member = watchingList[index] as Map<String, dynamic>;
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey[300]!),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: Colors.teal[100],
-                          child: const Icon(Icons.person, color: Colors.teal),
-                        ),
-                        title: Text(
-                          member['name'] ?? '未命名',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: const Text("權限: 僅檢視"),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.red,
-                          ),
-                          onPressed: _isLoading
-                              ? null
-                              : () => _handleUnbind(member),
-                        ),
-                      ),
-                    );
-                  },
+                  itemBuilder: (context, index) =>
+                      _buildMemberTile(watchingList[index]),
                 );
               },
             ),
-
             const SizedBox(height: 32),
             const Divider(),
             const SizedBox(height: 32),
-
-            // 區塊 A：我是被照顧者 (產生代碼)
-            const Text(
-              "👵 我想讓家人看我的紀錄",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.orange[50],
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.orange[200]!),
-              ),
-              child: Column(
-                children: [
-                  if (_generatedCode == null) ...[
-                    const Icon(Icons.qr_code, size: 48, color: Colors.orange),
-                    const SizedBox(height: 12),
-                    const Text("產生一組 4 位數邀請碼\n給您的家人輸入"),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _handleGenerateCode,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text("產生邀請碼"),
-                    ),
-                  ] else ...[
-                    const Text("您的邀請碼", style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 8),
-                    Text(
-                      _generatedCode!,
-                      style: const TextStyle(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 8,
-                        color: Colors.orange,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "請在 10 分鐘內使用",
-                      style: TextStyle(color: Colors.red, fontSize: 12),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // 🟢 修改：將「複製」與「傳送給家人」並排顯示
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            Clipboard.setData(
-                              ClipboardData(text: _generatedCode!),
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("已複製代碼")),
-                            );
-                          },
-                          icon: const Icon(Icons.copy, size: 18),
-                          label: const Text("複製"),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton.icon(
-                          onPressed: _shareCode,
-                          icon: const Icon(Icons.send, size: 18),
-                          label: const Text("傳送給家人"),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
+            _buildGenerateSection(),
             const SizedBox(height: 40),
-            const Divider(),
-            const SizedBox(height: 40),
-
-            // 區塊 B：我是照顧者 (輸入代碼)
-            const Text(
-              "🧑‍⚕️ 我要查看家人的健康",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.blue[200]!),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.person_add, size: 48, color: Colors.blue),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _codeController,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    maxLength: 4,
-                    decoration: const InputDecoration(
-                      hintText: "輸入對方給您的 4 位數代碼",
-                      border: OutlineInputBorder(),
-                      filled: true,
-                      fillColor: Colors.white,
-                      counterText: "",
-                    ),
-                    style: const TextStyle(fontSize: 24, letterSpacing: 4),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _handleJoinFamily,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text("加入家庭成員"),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 40),
+            _buildJoinSection(),
           ],
         ),
       ),
     );
   }
+
+  Widget _buildEmptyList() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Text(
+        "目前沒有連結任何家人",
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.grey),
+      ),
+    );
+  }
+
+  Widget _buildMemberTile(Map<String, dynamic> member) {
+    return ListTile(
+      leading: const CircleAvatar(child: Icon(Icons.person)),
+      title: Text(
+        member['name'] ?? '未命名',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      subtitle: const Text("權限: 僅檢視"),
+    );
+  }
+
+  Widget _buildGenerateSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "👵 我想讓家人看我的紀錄",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 180),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.orange[50],
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.orange[200]!, width: 2),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (_generatedCode == null) ...[
+                const Icon(Icons.qr_code_2, size: 64, color: Colors.orange),
+                const SizedBox(height: 12),
+                const Text(
+                  "點擊按鈕產生邀請碼",
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _handleGenerateCode,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? _buildLoading()
+                      : const Text("產生邀請碼", style: TextStyle(fontSize: 16)),
+                ),
+              ] else ...[
+                const Text(
+                  "您的邀請碼",
+                  style: TextStyle(color: Colors.grey, letterSpacing: 1.2),
+                ),
+                const SizedBox(height: 12),
+
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 80),
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: Text(
+                      _generatedCode!,
+                      style: const TextStyle(
+                        fontSize: 100,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 12,
+                        color: Colors.orange,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _secondsRemaining < 60
+                          ? Colors.red[50]
+                          : Colors.orange[100],
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "剩餘有效時間：${_formatTime(_secondsRemaining)}",
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _secondsRemaining < 60
+                            ? Colors.red
+                            : Colors.orange[900],
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(text: _generatedCode!),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("已複製代碼")),
+                          );
+                        },
+                        icon: const Icon(Icons.copy, size: 18),
+                        label: const Text("複製"),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.orange),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _shareCode,
+                        icon: const Icon(Icons.share, size: 18),
+                        label: const Text("分享"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildJoinSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "🧑‍⚕️ 我要查看家人的健康",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.blue[200]!),
+          ),
+          child: Column(
+            children: [
+              TextField(
+                controller: _codeController,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                maxLength: 4,
+                decoration: const InputDecoration(
+                  hintText: "請輸入邀請碼",
+                  border: OutlineInputBorder(),
+                  filled: true,
+                  fillColor: Colors.white,
+                  counterText: "",
+                ),
+                style: const TextStyle(
+                  fontSize: 24,
+                  letterSpacing: 8,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _isLoading ? null : _handleJoinFamily,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text("加入家庭成員"),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoading() => const SizedBox(
+    width: 20,
+    height: 20,
+    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+  );
 }

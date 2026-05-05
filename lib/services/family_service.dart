@@ -16,81 +16,91 @@ class FamilyService {
     // 產生 4 位數隨機碼 (1000 ~ 9999)
     String code = (1000 + Random().nextInt(9000)).toString();
 
-    // 將邀請碼存入 'invites' 集合
+    // 設定 10 分鐘後過期
+    DateTime expireTime = DateTime.now().add(const Duration(minutes: 10));
+
     await _db.collection('invites').doc(code).set({
       'owner_uid': user.uid,
-      'owner_email': user.email ?? "匿名使用者", // 處理匿名登入沒有 email 的情況
+      'owner_email': user.email ?? "未知使用者",
       'created_at': FieldValue.serverTimestamp(),
+      'expires_at': Timestamp.fromDate(expireTime),
     });
 
-    return code; // 回傳給 UI 顯示
+    return code;
   }
 
   // --------------------------------------------------------
-  // 2. 輸入邀請碼並綁定 (修正版：使用 batch.set 解決新用戶問題)
+  // 2. 輸入邀請碼並綁定
   // --------------------------------------------------------
   Future<Map<String, dynamic>> joinFamily(String inputCode) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("尚未登入");
 
-    // A. 查詢這個邀請碼是否存在
-    var inviteDoc = await _db.collection('invites').doc(inputCode).get();
+    var snapshot = await _db.collection('invites').doc(inputCode).get();
 
-    if (!inviteDoc.exists) {
-      throw Exception("無效的邀請碼");
+    if (!snapshot.exists) throw Exception("無效的邀請碼");
+
+    final data = snapshot.data()!;
+    Timestamp expiresAt = data['expires_at'];
+
+    // 檢查是否過期
+    if (DateTime.now().isAfter(expiresAt.toDate())) {
+      await _db.collection('invites').doc(inputCode).delete();
+      throw Exception("該邀請碼已過期");
     }
 
-    String targetUid = inviteDoc.data()!['owner_uid'];
-    String targetEmail = inviteDoc.data()!['owner_email'];
+    String targetUid = data['owner_uid'];
+    String targetEmail = data['owner_email'];
 
-    // 如果自己加自己，擋掉
-    if (targetUid == user.uid) {
-      throw Exception("不能加入自己為家庭成員");
-    }
+    if (targetUid == user.uid) throw Exception("不能加入自己為家庭成員");
 
     try {
-      // 使用 Batch (批次寫入) 取代 Transaction，對於建立新文件較穩定
-      WriteBatch batch = _db.batch();
+      await _db.runTransaction((transaction) async {
+        // A. 更新長輩的允許查看者清單
+        DocumentReference targetUserRef = _db
+            .collection('users')
+            .doc(targetUid);
+        transaction.update(targetUserRef, {
+          'allowed_viewers': FieldValue.arrayUnion([user.uid]),
+        });
 
-      // B. 更新對方的資料 (阿嬤)：把我的 UID 加入她的 allowed_viewers
-      DocumentReference targetUserRef = _db.collection('users').doc(targetUid);
-      // 🟢 關鍵修正：使用 set + merge: true，防止對方文件不存在時報錯
-      batch.set(targetUserRef, {
-        'allowed_viewers': FieldValue.arrayUnion([user.uid]),
-      }, SetOptions(merge: true));
+        // B. 更新我的追蹤清單
+        DocumentReference myUserRef = _db.collection('users').doc(user.uid);
+        transaction.update(myUserRef, {
+          'watching_list': FieldValue.arrayUnion([
+            {
+              'uid': targetUid,
+              'name': targetEmail.contains('@')
+                  ? targetEmail.split('@')[0]
+                  : targetEmail,
+              'role': '家人',
+              'added_at': DateTime.now().toIso8601String(),
+            },
+          ]),
+        });
 
-      // C. 更新我的資料 (孫子)：把對方加入我的 watching_list
-      DocumentReference myUserRef = _db.collection('users').doc(user.uid);
-      // 🟢 關鍵修正：使用 set + merge: true，自動建立新使用者的文件
-      batch.set(myUserRef, {
-        'watching_list': FieldValue.arrayUnion([
-          {
-            'uid': targetUid,
-            'name': targetEmail.contains('@')
-                ? targetEmail.split('@')[0]
-                : targetEmail, // 簡單處理名字
-            'role': '家人',
-            'added_at': DateTime.now().toIso8601String(),
-          },
-        ]),
-      }, SetOptions(merge: true));
-
-      // D. 刪除邀請碼 (確保只能用一次)
-      DocumentReference inviteRef = _db.collection('invites').doc(inputCode);
-      batch.delete(inviteRef);
-
-      // 提交變更
-      await batch.commit();
+        // C. 刪除邀請碼 (確保一次性使用)
+        DocumentReference inviteRef = _db.collection('invites').doc(inputCode);
+        transaction.delete(inviteRef);
+      });
 
       return {'success': true, 'targetName': targetEmail};
     } catch (e) {
-      print("綁定錯誤詳細資訊: $e");
       throw Exception("綁定失敗: $e");
     }
   }
 
   // --------------------------------------------------------
-  // 🟢 3. 新增功能：解除綁定 (移除家人)
+  // 3. 取得家人清單流
+  // --------------------------------------------------------
+  Stream<DocumentSnapshot> getMyFamilyList() {
+    final user = _auth.currentUser;
+    if (user == null) return const Stream.empty();
+    return _db.collection('users').doc(user.uid).snapshots();
+  }
+
+  // --------------------------------------------------------
+  // 4. 解除綁定邏輯
   // --------------------------------------------------------
   Future<void> unbindFamily(Map<String, dynamic> targetMember) async {
     final user = _auth.currentUser;
@@ -101,41 +111,26 @@ class FamilyService {
     try {
       WriteBatch batch = _db.batch();
 
-      // A. 從我的 watching_list 移除這個家人
+      // A. 從我的 watching_list 移除
       DocumentReference myUserRef = _db.collection('users').doc(user.uid);
-
-      // 先讀取最新的資料
       var mySnapshot = await myUserRef.get();
       if (mySnapshot.exists) {
         List<dynamic> currentList = mySnapshot.get('watching_list') ?? [];
-        // 過濾掉要刪除的 UID
         List<dynamic> newList = currentList
             .where((item) => item['uid'] != targetUid)
             .toList();
         batch.update(myUserRef, {'watching_list': newList});
       }
 
-      // B. 從對方的 allowed_viewers 移除我的 UID，對方就不會再開放權限給我
+      // B. 從對方的 allowed_viewers 移除
       DocumentReference targetUserRef = _db.collection('users').doc(targetUid);
       batch.update(targetUserRef, {
         'allowed_viewers': FieldValue.arrayRemove([user.uid]),
       });
 
-      // 提交變更
       await batch.commit();
     } catch (e) {
-      print("解除綁定失敗: $e");
-      throw Exception("解除綁定失敗，請檢查網路或權限");
+      throw Exception("解除綁定失敗: $e");
     }
-  }
-
-  // --------------------------------------------------------
-  // 4. 取得我的家人清單 (用於切換視角 UI)
-  // --------------------------------------------------------
-  Stream<DocumentSnapshot> getMyFamilyList() {
-    final user = _auth.currentUser;
-    if (user == null) return const Stream.empty();
-
-    return _db.collection('users').doc(user.uid).snapshots();
   }
 }

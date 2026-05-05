@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/family_service.dart';
 
-// 定義一個 Callback，當使用者切換家人時，通知首頁更新
 typedef OnFamilySelected = void Function(String uid, String name);
 
 class FamilySwitcher extends StatelessWidget {
@@ -21,7 +21,6 @@ class FamilySwitcher extends StatelessWidget {
     if (user == null) return const SizedBox.shrink();
 
     return StreamBuilder<DocumentSnapshot>(
-      // 監聽我的使用者資料，看 watching_list 有沒有變動
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -30,11 +29,10 @@ class FamilySwitcher extends StatelessWidget {
         if (!snapshot.hasData) return const Icon(Icons.people_outline);
 
         final userData = snapshot.data!.data() as Map<String, dynamic>?;
-        // 取得關注列表 (如果沒有就給空陣列)
         final List<dynamic> watchingList = userData?['watching_list'] ?? [];
 
         return PopupMenuButton<String>(
-          tooltip: "切換家人視角",
+          tooltip: "切換視角",
           offset: const Offset(0, 50),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -59,23 +57,19 @@ class FamilySwitcher extends StatelessWidget {
             ),
           ),
           onSelected: (String value) {
-            // 🟢 判斷：如果是點擊「家庭設定」，就跳轉頁面
             if (value == 'FAMILY_SETTINGS') {
               Navigator.pushNamed(context, '/family_settings');
               return;
             }
 
-            // 否則執行切換使用者的邏輯
             String selectedName = "我自己";
             if (value != user.uid) {
-              // 修正: 增加型別檢查與空值處理，避免 crash
               final target = watchingList.firstWhere(
                 (e) => e is Map && e['uid'] == value,
                 orElse: () => null,
               );
               if (target != null) selectedName = target['name'] ?? "未知家人";
             }
-            // 通知首頁切換
             onSelected(value, selectedName);
           },
           itemBuilder: (BuildContext context) {
