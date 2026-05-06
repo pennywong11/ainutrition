@@ -1961,7 +1961,7 @@ class _ReportPageState extends State<ReportPage> {
 
   // 1. AI 建議生成邏輯(會根據這週/這月/這範圍所吃的熱量平均值去決定在此區顯示哪段文字)
   String _generateAIFeedback(double avgCal, double p, double c, double f) {
-    if (avgCal == 0) return "目前尚無數據。開始記錄餐點，AI 將為您分析飲食趨勢！";
+    if (avgCal == 0) return "目前尚無數據喔！\n開始記錄餐點，AI 將為您分析飲食趨勢！";
 
     List<String> suggestions = [];
 
@@ -2157,458 +2157,235 @@ class _ReportPageState extends State<ReportPage> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               // 報表頁面：切換週報/月報/自訂範圍選單(同一橫排)
               children: [
-                _buildReportTypeButton(
-                  '週報',
-                  ReportType.weekly,
-                  Icons.calendar_view_week,
-                ),
-                _buildReportTypeButton(
-                  '月報',
-                  ReportType.monthly,
-                  Icons.calendar_view_month,
-                ),
-                _buildReportTypeButton(
-                  '自訂',
-                  ReportType.custom,
-                  Icons.edit_calendar,
-                ),
+                _buildReportTypeButton('週報', ReportType.weekly, Icons.calendar_view_week),
+                _buildReportTypeButton('月報', ReportType.monthly, Icons.calendar_view_month),
+                _buildReportTypeButton('自訂', ReportType.custom, Icons.edit_calendar),
               ],
             ),
           ),
         ),
       ),
-      // 1. 第一格欄位內容(左上角的"營養摘要"、右上角的"灰色日期按鈕")
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        '營養摘要',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  GestureDetector(
-                                    onTap: _onDateRangeTap,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color.fromARGB(
-                                          255,
-                                          157,
-                                          198,
-                                          194,
-                                        ).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: const Color.fromARGB(
-                                            255,
-                                            157,
-                                            198,
-                                            194,
-                                          ).withOpacity(0.3),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Text(
-                                            _getDateRangeText(),
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.grey[700],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          const Icon(
-                                            Icons.edit_calendar,
-                                            size: 16,
-                                            color: Color.fromARGB(
-                                              255,
-                                              157,
-                                              198,
-                                              194,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // 營養摘要欄位框中的六個圖標
-                              const SizedBox(height: 20),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildSummaryItem(
-                                      '總餐數',
-                                      '${_reportData?.totalMeals}',
-                                      Icons.restaurant,
-                                      Colors.deepPurple,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _buildSummaryItem(
-                                      '總重量',
-                                      '${_reportData?.totalWeight.toStringAsFixed(1)} g',
-                                      Icons.fitness_center,
-                                      Colors.green,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _buildSummaryItem(
-                                      '總熱量',
-                                      '${_reportData?.totalCalories.toStringAsFixed(0)} kcal',
-                                      Icons.local_fire_department,
-                                      Colors.redAccent,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildSummaryItem(
-                                      '蛋白質',
-                                      '${_reportData?.totalProtein.toStringAsFixed(1)} g',
-                                      Icons.egg,
-                                      const Color.fromARGB(255, 117, 181, 233),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _buildSummaryItem(
-                                      '碳水',
-                                      '${_reportData?.totalCarbs.toStringAsFixed(1)} g',
-                                      Icons.water_drop,
-                                      const Color.fromARGB(255, 132, 202, 206),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _buildSummaryItem(
-                                      '脂質',
-                                      '${_reportData?.totalFat.toStringAsFixed(1)} g',
-                                      Icons.opacity,
-                                      const Color.fromARGB(255, 245, 190, 118),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: cardSpacing),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                // 判斷是否為手機版（寬度小於 700）
+                bool isMobile = constraints.maxWidth < 700;
 
-                      // 2. 第二格欄位內容(每日平均攝取量)：總和/天數=平均值
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '每日平均攝取',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  _buildAvgColumn(
-                                    '${_reportData?.dailyAverages['protein']?.toStringAsFixed(1)} g',
-                                    '蛋白質',
-                                    const Color.fromARGB(255, 117, 181, 233),
-                                  ),
-                                  _buildAvgColumn(
-                                    '${_reportData?.dailyAverages['carbs']?.toStringAsFixed(1)} g',
-                                    '碳水',
-                                    const Color.fromARGB(255, 132, 202, 206),
-                                  ),
-                                  _buildAvgColumn(
-                                    '${_reportData?.dailyAverages['fat']?.toStringAsFixed(1)} g',
-                                    '脂質',
-                                    const Color.fromARGB(255, 245, 190, 118),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: cardSpacing),
-
-                      // 3. 第三格欄位內容(熱量攝取 Top 3)：
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '熱量攝取排行',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              if (_periodFoodList.isNotEmpty) ...[
-                                // 先將食物清單依照熱量由高到低排序，並取前三名
-                                ...(() {
-                                  List<FoodItem> topFoods = List.from(_periodFoodList);
-                                  topFoods.sort((a, b) {
-                                    double calA = double.tryParse(a.calories.replaceAll(' 大卡', '')) ?? 0;
-                                    double calB = double.tryParse(b.calories.replaceAll(' 大卡', '')) ?? 0;
-                                    return calB.compareTo(calA);
-                                  });
-                                  return topFoods.take(3);
-                                })().toList().asMap().entries.map((entry) {
-                                  int index = entry.key;
-                                  FoodItem item = entry.value;
-
-                                  // 定義前三名的顏色
-                                  final List<Color> rankColors = [
-                                    const Color(0xFFE96A60), // 第一名 紅
-                                    const Color(0xFFF5BE76), // 第二名 橘
-                                    const Color(0xFFA5C5C2), // 第三名 藍綠
-                                  ];
-
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 12.0),
-                                    child: Row(
-                                      children: [
-                                        // 1. 圓圈序號
-                                        Container(
-                                          width: 28,
-                                          height: 28,
-                                          decoration: BoxDecoration(
-                                            color: rankColors[index],
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              '${index + 1}',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 16),
-                                        // 2. 食物名稱
-                                        Expanded(
-                                          child: Text(
-                                            item.name,
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        // 3. 熱量數值
-                                        Text(
-                                          item.calories,
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.grey[800],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                              ] else
-                                const Center(
-                                  child: Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 20),
-                                    child: Text("本期尚無餐點紀錄", style: TextStyle(color: Colors.grey)),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: cardSpacing),
-                
-                      // 4. 第四格欄位內容(AI 營養觀察與建議)
-                      if (_reportData != null)
-                        Card(
-                          elevation: 4,
-                          color: const Color(0xFFF1F8F7), //淺綠色背景
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(20),
-                            child: Column(
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1000),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (isMobile) ...[
+                            // 📱 手機版：每個大框框一橫排，垂直往下擠
+                            _card1(), // 營養摘要
+                            const SizedBox(height: 16),
+                            _card2(), // 每日平均
+                            const SizedBox(height: 16),
+                            _card3(), // 熱量排行
+                            const SizedBox(height: 16),
+                            _card4(isMobile: true), // AI 建議
+                            const SizedBox(height: 16),
+                            _card5(isMobile: true), // 餐點紀錄
+                          ] else ...[
+                            // 💻 電腦/平板版：維持 1左2右 + 下方2橫排
+                            Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.auto_awesome, // 星星圖示
-                                      color: Colors.teal[600],
-                                      size: 22,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'AI 營養觀察與建議',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF2D4F4B),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Divider(height: 24, thickness: 0.8),
-                                Text(
-                                  _reportData!.aiFeedback,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    height: 1.6,
-                                    color: Colors.black87,
+                                // 左側：營養摘要
+                                Expanded(flex: 1, child: _card1()),
+                                const SizedBox(width: 16),
+                                // 右側：上下堆疊
+                                Expanded(
+                                  flex: 1,
+                                  child: Column(
+                                    children: [
+                                      _card2(),
+                                      const SizedBox(height: 16),
+                                      _card3(),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ),
-                      const SizedBox(height: cardSpacing),
-
-                      // 5. 第五格欄位內容(餐點紀錄)：將每筆在此範圍內的食物都列出
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${_reportData?.period} 餐點紀錄',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              _periodFoodList.isEmpty
-                                  ? const Center(child: Text('本期尚無餐點紀錄'))
-                                  : ListView.separated(
-                                      shrinkWrap: true,
-                                      physics:
-                                          const NeverScrollableScrollPhysics(),
-                                      itemCount: _periodFoodList.length,
-                                      separatorBuilder: (c, i) =>
-                                          const SizedBox(height: 12),
-                                      itemBuilder: (context, index) {
-                                        final item = _periodFoodList[index];
-                                        return Row(
-                                          children: [
-                                            _buildFoodImage(
-                                              item.imagePath,
-                                              item.mealType,
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  // 1. 餐點名稱
-                                                  Text(
-                                                    item.name,
-                                                    style: const TextStyle(
-                                                      fontSize: 16,
-                                                      fontWeight:FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                  // 2. 日期與餐點時段
-                                                  Text(
-                                                    '${_formatDate(item.createdAt!)} • ${item.mealType}',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.grey[600],
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            // 3. 熱量數值
-                                            Container(
-                                              alignment: Alignment.bottomRight,
-                                              height: 40,
-                                              child: Text(
-                                                item.calories,
-                                                style: const TextStyle(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      },
-                                    ),
-                            ],
-                          ),
-                        ),
+                            const SizedBox(height: 16),
+                            // 下方區域
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: _card4(isMobile: false)),
+                                const SizedBox(width: 16),
+                                Expanded(child: _card5(isMobile: false)),
+                              ],
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
     );
   }
+  // --- 卡片組件 (請放在 build 方法之外) ---
+
+  Widget _card1() => Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('營養摘要', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                GestureDetector(
+                  onTap: _onDateRangeTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color.fromARGB(255, 157, 198, 194).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color.fromARGB(255, 157, 198, 194).withOpacity(0.3)),
+                    ),
+                    child: Row(children: [
+                      Text(_getDateRangeText(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.edit_calendar, size: 14, color: Color.fromARGB(255, 157, 198, 194)),
+                    ]),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: _buildSummaryItem('總餐數', '${_reportData?.totalMeals ?? 0}', Icons.restaurant, Colors.deepPurple)),
+                Expanded(child: _buildSummaryItem('總重量', '${_reportData?.totalWeight.toStringAsFixed(1) ?? "0.0"} g', Icons.fitness_center, Colors.green)),
+                Expanded(child: _buildSummaryItem('總熱量', '${_reportData?.totalCalories.toStringAsFixed(0) ?? 0} kcal', Icons.local_fire_department, Colors.redAccent)),
+              ]),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: _buildSummaryItem('蛋白質', '${_reportData?.totalProtein.toStringAsFixed(1) ?? "0.0"} g', Icons.egg, const Color.fromARGB(255, 117, 181, 233))),
+                Expanded(child: _buildSummaryItem('碳水', '${_reportData?.totalCarbs.toStringAsFixed(1) ?? "0.0"} g', Icons.water_drop, const Color.fromARGB(255, 132, 202, 206))),
+                Expanded(child: _buildSummaryItem('脂質', '${_reportData?.totalFat.toStringAsFixed(1) ?? "0.0"} g', Icons.opacity, const Color.fromARGB(255, 245, 190, 118))),
+              ]),
+            ],
+          ),
+        ),
+      );
+
+  Widget _card2() => Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('每日平均攝取', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              const Divider(height: 20),
+              Row(children: [
+                _buildAvgColumn('${_reportData?.dailyAverages['protein']?.toStringAsFixed(1) ?? "0.0"} g', '蛋白質', const Color.fromARGB(255, 117, 181, 233)),
+                _buildAvgColumn('${_reportData?.dailyAverages['carbs']?.toStringAsFixed(1) ?? "0.0"} g', '碳水', const Color.fromARGB(255, 132, 202, 206)),
+                _buildAvgColumn('${_reportData?.dailyAverages['fat']?.toStringAsFixed(1) ?? "0.0"} g', '脂質', const Color.fromARGB(255, 245, 190, 118)),
+              ]),
+            ],
+          ),
+        ),
+      );
+
+  Widget _card3() => Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('熱量排行 Top 3', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              if (_periodFoodList.isNotEmpty) ...[
+                ...(() {
+                  List<FoodItem> topFoods = List.from(_periodFoodList);
+                  topFoods.sort((a, b) {
+                    double calA = double.tryParse(a.calories.replaceAll(' 大卡', '')) ?? 0;
+                    double calB = double.tryParse(b.calories.replaceAll(' 大卡', '')) ?? 0;
+                    return calB.compareTo(calA);
+                  });
+                  return topFoods.take(3);
+                })().toList().asMap().entries.map((entry) {
+                  int index = entry.key;
+                  FoodItem item = entry.value;
+                  final List<Color> rankColors = [const Color(0xFFE96A60), const Color(0xFFF5BE76), const Color(0xFFA5C5C2)];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(children: [
+                      CircleAvatar(radius: 10, backgroundColor: rankColors[index], child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 10))),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(item.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                    ]),
+                  );
+                }).toList(),
+              ] else
+                const Divider(height: 8),
+                const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("目前尚無紀錄喔！", style: TextStyle(fontSize: 12)))),
+            ],
+          ),
+        ),
+      );
+
+  Widget _card4({required bool isMobile}) => Container(
+        constraints: BoxConstraints(minHeight: isMobile ? 120 : 250),
+        child: Card(
+          elevation: 4,
+          color: const Color(0xFFF1F8F7),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.auto_awesome, color: Colors.teal[600], size: 18),
+                const SizedBox(width: 8),
+                const Text('AI 飲食建議', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF2D4F4B))),
+              ]),
+              const Divider(height: 30),
+              Text(_reportData?.aiFeedback ?? "分析中...", style: const TextStyle(fontSize: 13, height: 1.5)),
+            ]),
+          ),
+        ),
+      );
+
+  Widget _card5({required bool isMobile}) => Container(
+        constraints: BoxConstraints(minHeight: isMobile ? 120 : 250),
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('餐點紀錄', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Divider(height: 20),
+              if (_periodFoodList.isEmpty)
+                const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('目前尚無紀錄喔！', style: TextStyle(fontSize: 12))))
+              else
+                ..._periodFoodList.take(3).map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Row(children: [
+                        _buildFoodImage(item.imagePath, item.mealType),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(item.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                      ]),
+                    )),
+            ]),
+          ),
+        ),
+      );
 
   // 輔助小工具
   Widget _buildAvgColumn(String value, String label, Color color) {
