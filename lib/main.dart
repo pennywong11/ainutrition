@@ -12,10 +12,11 @@ import 'widget_handler.dart';
 // 全局變數，用於儲存當前登入的使用者資訊
 User? currentUser;
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+// final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // 負責初始化 Firebase Auth，並確保使用固定的匿名 UID
 Future<void> _initializeAuth() async {
+
   // 1. 檢查是否有現有的使用者登入狀態
   currentUser = FirebaseAuth.instance.currentUser;
 
@@ -63,7 +64,6 @@ Future<void> main() async {
   // 註冊背景訊息 handler
   FirebaseMessaging.onBackgroundMessage(_backgroundMessageHandler);
   // 6. 桌面小工具初始化
-  WidgetsFlutterBinding.ensureInitialized();
   WidgetHandler.init();
   //await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
   //final userCredential = await FirebaseAuth.instance.signInAnonymously();

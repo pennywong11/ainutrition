@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/family_service.dart';
 
-// 定義一個 Callback，當使用者切換家人時，通知首頁更新
 typedef OnFamilySelected = void Function(String uid, String name);
 
 class FamilySwitcher extends StatelessWidget {
@@ -21,61 +21,44 @@ class FamilySwitcher extends StatelessWidget {
     if (user == null) return const SizedBox.shrink();
 
     return StreamBuilder<DocumentSnapshot>(
-      // 監聽我的使用者資料，看 watching_list 有沒有變動
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Icon(Icons.people_outline);
+        // 如果還在載入中，顯示一個預設的人形符號
+        if (!snapshot.hasData)
+          return const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Icon(Icons.people_outline, color: Colors.grey),
+          );
 
         final userData = snapshot.data!.data() as Map<String, dynamic>?;
-        // 取得關注列表 (如果沒有就給空陣列)
         final List<dynamic> watchingList = userData?['watching_list'] ?? [];
 
         return PopupMenuButton<String>(
-          tooltip: "切換家人視角",
+          tooltip: "切換視角 (目前: $currentName)",
           offset: const Offset(0, 50),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.teal.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.teal.shade200),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.swap_horiz, size: 16, color: Colors.teal),
-                const SizedBox(width: 8),
-                Text(
-                  currentName, // 顯示目前在看誰
-                  style: const TextStyle(
-                    color: Colors.teal,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+          // 🟢 核心修改：將圖示顏色改為與通知一致的灰色 (Colors.grey)
+          icon: const Icon(
+            Icons.supervisor_account_outlined,
+            color: Colors.white,
+            size: 26,
           ),
           onSelected: (String value) {
-            // 🟢 判斷：如果是點擊「家庭設定」，就跳轉頁面
             if (value == 'FAMILY_SETTINGS') {
               Navigator.pushNamed(context, '/family_settings');
               return;
             }
 
-            // 否則執行切換使用者的邏輯
             String selectedName = "我自己";
             if (value != user.uid) {
-              // 修正: 增加型別檢查與空值處理，避免 crash
               final target = watchingList.firstWhere(
                 (e) => e is Map && e['uid'] == value,
                 orElse: () => null,
               );
               if (target != null) selectedName = target['name'] ?? "未知家人";
             }
-            // 通知首頁切換
             onSelected(value, selectedName);
           },
           itemBuilder: (BuildContext context) {
@@ -85,11 +68,18 @@ class FamilySwitcher extends StatelessWidget {
             menuItems.add(
               PopupMenuItem(
                 value: user.uid,
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.person, color: Colors.blue),
-                    SizedBox(width: 10),
-                    Text("我自己"),
+                    Icon(
+                      Icons.person,
+                      color: currentName == "我自己" ? Colors.teal : Colors.blue,
+                    ),
+                    const SizedBox(width: 10),
+                    // 🟢 核心修改：移除粗體字樣式
+                    const Text(
+                      "我自己",
+                      style: TextStyle(fontWeight: FontWeight.normal),
+                    ),
                   ],
                 ),
               ),
@@ -100,14 +90,24 @@ class FamilySwitcher extends StatelessWidget {
               menuItems.add(const PopupMenuDivider());
               for (var member in watchingList) {
                 if (member is Map) {
+                  final bool isCurrent = currentName == (member['name'] ?? "");
                   menuItems.add(
                     PopupMenuItem(
                       value: member['uid'],
                       child: Row(
                         children: [
-                          const Icon(Icons.people_alt, color: Colors.orange),
+                          Icon(
+                            Icons.people_alt,
+                            color: isCurrent ? Colors.teal : Colors.orange,
+                          ),
                           const SizedBox(width: 10),
-                          Text(member['name'] ?? "家人"),
+                          // 🟢 核心修改：移除粗體字樣式
+                          Text(
+                            member['name'] ?? "家人",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -115,11 +115,10 @@ class FamilySwitcher extends StatelessWidget {
                 }
               }
             } else {
-              // 🟢 如果沒家人，保留提示文字，讓使用者知道還沒連結
               menuItems.add(const PopupMenuDivider());
               menuItems.add(
                 const PopupMenuItem(
-                  enabled: false, // 這行只是提示，不能點
+                  enabled: false,
                   child: Text(
                     "尚無連結的家人\n請點擊下方設定新增",
                     style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -128,8 +127,7 @@ class FamilySwitcher extends StatelessWidget {
               );
             }
 
-            // 🟢 3. 新增：家庭共享設定入口 (現在無論如何都會顯示)
-            // 如果上方有列表，加個分隔線
+            // 3. 家庭共享設定入口
             if (watchingList.isNotEmpty) {
               menuItems.add(const PopupMenuDivider());
             }

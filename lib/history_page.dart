@@ -505,8 +505,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       // 主頁頂端橫列
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-        elevation: 0,
         // 🟢 修改標題：顯示目前正在看誰
         title: _targetName == "我自己"
             ? null
@@ -542,7 +540,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             child: IconButton(
               onPressed: _openReportPage,
               icon: const Icon(Icons.bar_chart),
-              tooltip: '週報月報',
+              // tooltip: '週報月報',
             ),
           ),
 
@@ -2139,18 +2137,11 @@ class _ReportPageState extends State<ReportPage> {
     return Scaffold(
       // 報表頁面的頂部標題列
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 157, 198, 194),
-        elevation: 0,
         title: const Text(
           '營養報告',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
+          preferredSize: const Size.fromHeight(kTextTabBarHeight),
           child: Container(
             color: Colors.white,
             child: Row(
@@ -2165,6 +2156,7 @@ class _ReportPageState extends State<ReportPage> {
           ),
         ),
       ),
+      // 1. 第一格欄位內容(左上角的"營養摘要"、右上角的"灰色日期按鈕")
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : LayoutBuilder(
@@ -2232,7 +2224,6 @@ class _ReportPageState extends State<ReportPage> {
             ),
     );
   }
-  // --- 卡片組件 (請放在 build 方法之外) ---
 
   Widget _card1() => Card(
         elevation: 4,

@@ -107,55 +107,43 @@ class NotificationHandler {
       "token": token,
       "platform": kIsWeb ? "web" : defaultTargetPlatform.name,
       "updatedAt": FieldValue.serverTimestamp(),
-    });
+    }, SetOptions(merge: true));
 
     debugPrint("token 已儲存");
   }
 
   // CM 監聽
   static void _initFCMListener() {
-    // 前台
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      // final notification = message.notification;
-      // if (notification == null) return;
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+    final title = message.notification?.title ?? message.data['title'];
+    final body = message.notification?.body ?? message.data['body'];
 
-      // Firebase 控制台（notification）
-      if (message.notification != null) {
-        debugPrint("📩 收到 Console 通知（不手動顯示）");
-        await NotificationRepository.saveFromFCM(message);
-        return;
-      }
+    if (title == null || body == null) return;
 
-      // 控制台發訊息會重複通知，改↓
-      // data-only 訊息（後端用 data-only 發送才會走這裡）
-      final title = message.data['title'];
-      final body = message.data['body'];
-
-      if (title == null || body == null) return;
-
-      await _localNotifications.show(
-        title.hashCode,
-        title,
-        body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'default_channel',
-            'Notifications',
-            importance: Importance.max,
-            priority: Priority.high,
-          ),
-          iOS: DarwinNotificationDetails(),
+    // 👉 前景一定手動顯示
+    await _localNotifications.show(
+      title.hashCode,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'default_channel',
+          'Notifications',
+          importance: Importance.max,
+          priority: Priority.high,
         ),
-      );
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
 
-      await NotificationRepository.saveFromFCM(message);
-    });
+    await NotificationRepository.saveFromFCM(message);
+  });
 
-    // 點擊通知
-    FirebaseMessaging.onMessageOpenedApp.listen((message) async {
-      await NotificationRepository.saveFromFCM(message);
-    });
-  }
+  FirebaseMessaging.onMessageOpenedApp.listen((message) async {
+    // 點擊通知進來（可做導頁）
+    await NotificationRepository.saveFromFCM(message);
+  });
+}
 
   static Future<String?> getFcmToken() async {
     return await FirebaseMessaging.instance.getToken();
