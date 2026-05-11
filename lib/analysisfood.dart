@@ -113,6 +113,9 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isAnalyzing = false;
   FoodAnalysisResult? _analysisResult;
 
+  // 🟢 核心變數：儲存使用者選擇的時間
+  DateTime? _userSelectedTime;
+
   late final GenerativeModel _model;
   bool _isApiKeyLoaded = false;
 
@@ -135,6 +138,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // 啟動時載入 CSV 資料庫
     _nutritionService.loadCsvData();
+
+    // 🟢 初始化預設時間為當前時間
+    _userSelectedTime = DateTime.now();
   }
 
   @override
@@ -174,6 +180,46 @@ class _DashboardPageState extends State<DashboardPage> {
     }
     _model = GenerativeModel(model: 'gemini-2.5-flash', apiKey: apiKey);
     setState(() => _isApiKeyLoaded = true);
+  }
+
+  // 🟢 新增：彈出日期與時間選擇器
+  Future<void> _pickDateTime() async {
+    // 1. 先選日期
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _userSelectedTime ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      helpText: '選擇紀錄日期',
+    );
+
+    if (pickedDate != null) {
+      // 2. 再選時間
+      if (!mounted) return;
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(
+          _userSelectedTime ?? DateTime.now(),
+        ),
+        helpText: '選擇紀錄時間',
+      );
+
+      if (pickedTime != null) {
+        setState(() {
+          _userSelectedTime = DateTime(
+            pickedDate.year,
+            pickedDate.month,
+            pickedDate.day,
+            pickedTime.hour,
+            pickedTime.minute,
+          );
+          // 若已經有分析結果，同步更新分析結果中的時間顯示
+          if (_analysisResult != null) {
+            _analysisResult!.analyzedTime = _userSelectedTime!;
+          }
+        });
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -294,8 +340,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 速度優化 1：調整圖片壓縮參數 (maxWidth: 600, quality: 50)
-  // 這會大幅減少上傳時間，解決 "分析要20秒" 的問題
   Future<void> _takePhotoWithCamera() async {
     try {
       final ImagePicker picker = ImagePicker();
@@ -442,6 +486,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _promptController.clear();
       _analysisResult = null;
       _isAnalyzing = false;
+      _userSelectedTime = DateTime.now(); // 重置時間
     });
   }
 
@@ -474,35 +519,35 @@ class _DashboardPageState extends State<DashboardPage> {
       1. **辨識圖片**：首先列出圖片中「所有」看得到的食材 (例如：豬排、咖哩醬、紅蘿蔔、白飯)。
       2. **判斷情境** (依序判定)：
       
-         - **情境 A [修飾模式]**：圖片清晰且是食物。
-           -> 核心原則：**圖片是主角，文字是修飾。**
-           -> 行動：保留圖片中看到的所有食材。若使用者文字提到「半飯」、「少油」、「去皮」等，請**調整對應食材的重量或熱量**。
-           -> **【重要】強制拆解原則**：若圖片中食材是「分開擺放」的（例如便當、自助餐），即使使用者文字輸入「炒飯」、「燴飯」等混合料理名稱，也請**優先依據圖片視覺，將飯、肉、菜分開列出**，除非圖片本身真的是混合料理。
-           -> 範例：圖是「排骨便當（飯、菜分開）」，文字寫「排骨炒飯」。
+          - **情境 A [修飾模式]**：圖片清晰且是食物。
+            -> 核心原則：**圖片是主角，文字是修飾。**
+            -> 行動：保留圖片中看到的所有食材。若使用者文字提到「半飯」、「少油」、「去皮」等，請**調整對應食材的重量或熱量**。
+            -> **【重要】強制拆解原則**：若圖片中食材是「分開擺放」的（例如便當、自助餐），即使使用者文字輸入「炒飯」、「燴飯」等混合料理名稱，也請**優先依據圖片視覺，將飯、肉、菜分開列出**，除非圖片本身真的是混合料理。
+            -> 範例：圖是「排骨便當（飯、菜分開）」，文字寫「排骨炒飯」。
               * 正確行為：忽略「炒飯」文字定義，輸出「白飯」、「炸排骨」、「炒青菜」。
-           -> 輸出：is_food: true, dish_name: 辨識結果, summary: 總結。
-           
-         - **情境 B [補救情境]**：圖片模糊/全黑/無法辨識，但使用者有輸入描述。
-           -> 行動：完全信賴使用者描述，提供標準估算值。
-           -> 輸出：is_food: true, dish_name: "$userInput (標準估算)", summary: "因圖片模糊，已依據文字分析提供標準數據。"
-           
-         - **情境 C [衝突情境]**：圖片清晰顯示為「非食物」(如貓、椅子、馬桶)，但使用者有輸入食物描述。
-           -> 行動：**強制信賴使用者描述**，忽略圖片內容。
-           -> 輸出：is_food: true, dish_name: "$userInput (文字估算)", summary: "圖片看起來是[圖片內容]，但已依據您的描述提供$userInput數據。"
-           
-         - **情境 D [無效情境]**：圖片非食物，且使用者「沒有」輸入描述。
-           -> 行動：拒絕服務。
-           -> 輸出：is_food: false, error_msg: "無法辨識為食物，請補充文字說明。"
+            -> 輸出：is_food: true, dish_name: 辨識結果, summary: 總結。
+            
+          - **情境 B [補救情境]**：圖片模糊/全黑/無法辨識，但使用者有輸入描述。
+            -> 行動：完全信賴使用者描述，提供標準估算值。
+            -> 輸出：is_food: true, dish_name: "$userInput (標準估算)", summary: "因圖片模糊，已依據文字分析提供標準數據。"
+            
+          - **情境 C [衝突情境]**：圖片清晰顯示為「非食物」(如貓、椅子、馬桶)，但使用者有輸入食物描述。
+            -> 行動：**強制信賴使用者描述**，忽略圖片內容。
+            -> 輸出：is_food: true, dish_name: "$userInput (文字估算)", summary: "圖片看起來是[圖片內容]，但已依據您的描述提供$userInput數據。"
+            
+          - **情境 D [無效情境]**：圖片非食物，且使用者「沒有」輸入描述。
+            -> 行動：拒絕服務。
+            -> 輸出：is_food: false, error_msg: "無法辨識為食物，請補充文字說明。"
 
       【嚴格輸出規範】：
       1. **dish_name (餐點名稱)**：請**簡潔扼要** (建議 10 字內)。
-         - 錯誤：營養豐富的香煎雞腿排佐時蔬便當
-         - 正確：香煎雞腿便當
+          - 錯誤：營養豐富的香煎雞腿排佐時蔬便當
+          - 正確：香煎雞腿便當
       2. **summary (營養總結)**：請非常精簡，**絕對不要超過 35 個中文字**。直接講重點，不要廢話。
       3. **ingredients (食材名稱)**：
-         - name: 請**只寫最核心的食材名**，去除所有冗言贅詞。
-         - **search_terms**: [重要] 請提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。
-         - **calories**: 提供 AI 估算的總營養素數值。
+          - name: 請**只寫最核心的食材名**，去除所有冗言贅詞。
+          - **search_terms**: [重要] 請提供 2~3 個適合在「台灣衛福部食品成分資料庫」搜尋的關鍵字。
+          - **calories**: 提供 AI 估算的總營養素數值。
 
       【回傳格式 (JSON Only)】：
       {
@@ -636,7 +681,7 @@ class _DashboardPageState extends State<DashboardPage> {
               dishName: data['dish_name'] ?? '未知食物',
               aiSummary: data['summary'] ?? '無法產生總結',
               ingredients: ingredients,
-              analyzedTime: DateTime.now(),
+              analyzedTime: _userSelectedTime ?? DateTime.now(), // 🟢 使用目前選擇的時間
             );
           });
 
@@ -707,8 +752,12 @@ class _DashboardPageState extends State<DashboardPage> {
         'AI分析建議': _analysisResult!.aiSummary,
         '食物名': _analysisResult!.dishName,
         '圖片_base64': base64Image,
-        'created_at': FieldValue.serverTimestamp(),
-        'analyzed_date_string': _formatDateTime(DateTime.now()),
+        'created_at': Timestamp.fromDate(
+          _userSelectedTime ?? DateTime.now(),
+        ), // 🟢 將選定的時間轉為 Firebase Timestamp
+        'analyzed_date_string': _formatDateTime(
+          _userSelectedTime ?? DateTime.now(),
+        ), // 🟢 存入選定的時間格式字串
         'total_calories': round2(_analysisResult!.totalCalories),
         'total_protein': round2(_analysisResult!.totalProtein),
         'total_carbs': round2(_analysisResult!.totalCarbs),
@@ -783,7 +832,10 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: null,
+        title: const Text(
+          "食物紀錄與分析",
+          style: TextStyle(fontWeight: FontWeight.normal),
+        ),
         centerTitle: false,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -999,6 +1051,51 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildControlBar(bool isMobile) {
     return Column(
       children: [
+        // 🟢 整合後的紀錄時間選擇區：顏色改為與原本 TextField 一致的灰色調
+        InkWell(
+          onTap: _isAnalyzing ? null : _pickDateTime,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_rounded,
+                  color: Colors.grey[600],
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '紀錄日期與時間 (點擊修改)',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _formatDateTime(_userSelectedTime ?? DateTime.now()),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Icon(Icons.edit, color: Colors.grey[400], size: 16),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
         if (_imageBytes != null && _analysisResult == null) ...[
           TextField(
             controller: _promptController,
@@ -1048,6 +1145,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     : null,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
+                  // 🟢 恢復：移除硬編碼的 teal.shade700，讓按鈕回歸原本的系統主題色
                 ),
                 child: _isAnalyzing
                     ? const SizedBox(
@@ -1065,9 +1163,15 @@ class _DashboardPageState extends State<DashboardPage> {
                             _analysisResult == null
                                 ? Icons.analytics_outlined
                                 : Icons.save_alt,
+                            size: 20,
                           ),
                           const SizedBox(width: 8),
-                          Text(_analysisResult == null ? '開始分析' : '確定儲存'),
+                          Text(
+                            _analysisResult == null ? '開始分析' : '確定儲存',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
                         ],
                       ),
               ),
@@ -1223,7 +1327,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 以下 UI 元件保持不變
   Widget _buildTitleSection(bool isMobile) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1244,7 +1347,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                _formatDateTime(_analysisResult!.analyzedTime),
+                "紀錄於: ${_formatDateTime(_analysisResult!.analyzedTime)}",
                 style: TextStyle(
                   fontSize: isMobile ? 12 : 14,
                   color: Colors.grey[600],
@@ -1315,20 +1418,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildLabel(IconData icon, Color color, String text, bool isMobile) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: isMobile ? 12 : 14, color: color),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(fontSize: isMobile ? 10 : 12, color: color),
-        ),
-      ],
-    );
-  }
-
   Widget _buildAISummary(bool isMobile) {
     return Container(
       padding: isMobile ? const EdgeInsets.all(10) : const EdgeInsets.all(12),
@@ -1347,6 +1436,7 @@ class _DashboardPageState extends State<DashboardPage> {
               style: TextStyle(
                 color: Colors.black87,
                 fontSize: isMobile ? 12 : 13,
+                height: 1.4,
               ),
             ),
           ),
