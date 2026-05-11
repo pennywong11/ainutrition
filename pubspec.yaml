@@ -27,6 +27,8 @@ dependencies:
   permission_handler: ^11.0.1
   googleapis: ^11.4.0
   http: ^1.1.0
+  pdf: ^3.10.10
+  printing: ^5.11.1
   js: ^0.6.6
   csv: ^6.0.0
   firebase_messaging: ^16.1.0
