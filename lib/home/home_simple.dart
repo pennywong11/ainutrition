@@ -284,10 +284,31 @@ class _HomeSimpleState extends State<HomeSimple> {
       child: Scaffold(
         appBar: _buildAppBar(),
         body: SafeArea(
-          child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _buildBody(isViewingOthers),
+          child: Column(
+            children: [
+              // 🟢 看家人時顯示醒目提示條（與第一份對齊）
+              if (isViewingOthers)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  color: Colors.orange[100],
+                  child: Text(
+                    "您目前正在檢視 $_targetName 的飲食紀錄 (唯讀模式)",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.orange[900],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildBody(isViewingOthers),
+              ),
+            ],
           ),
+        ),
         // 🟢 看他人時隱藏 FAB
         floatingActionButton: isViewingOthers ? null : _buildFab(),
       ),

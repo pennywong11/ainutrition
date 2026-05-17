@@ -404,9 +404,9 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         // 🟢 修改標題：顯示目前正在看誰
-        title: _targetName == "我自己"
-            ? null
-            : Text("正在檢視: $_targetName", style: const TextStyle(fontSize: 16)),
+        // title: _targetName == "我自己"
+        //     ? null
+        //     : Text("正在檢視: $_targetName", style: const TextStyle(fontSize: 16)),
         actions: [
           // 1. 家庭切換器 (來自 familysetting0402)
           Padding(
