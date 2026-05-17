@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart'; //Firebase核心
 import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料庫功能
 import 'package:firebase_auth/firebase_auth.dart';
 import 'report_page.dart';
+import 'ana2.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
 // 通知欄
@@ -14,8 +15,10 @@ import 'notifications/notification_ui.dart';
 import 'notifications/notification_bell.dart';
 // 🟢 引入切換按鈕元件 (家庭共享功能)
 import '../widgets/family_switcher.dart';
-// 資料模型區(Models)：定義資料的樣子
+// 匯入網路檢查工具
+import 'package:connectivity_plus/connectivity_plus.dart';
 
+// 資料模型區(Models)：定義資料的樣子
 // 每個"食物"的資料結構：食物名稱、熱量、圖片、蛋白質等等欄位
 class FoodItem {
   String id;
@@ -288,7 +291,6 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
 
     // 🟢 使用 _targetUid 決定要抓取誰的資料
     final uidToFetch = _targetUid;
-
     if (uidToFetch == null) {
       setState(() {
         _isLoading = false;
@@ -324,12 +326,17 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
         .where('created_at', isGreaterThanOrEqualTo: startOfDay)
         .where('created_at', isLessThanOrEqualTo: endOfDay)
         .orderBy('created_at', descending: true)
-        .snapshots()
-        .listen(
-          (snapshot) async {
+        // 當 Firebase 從「快取」抓到資料時，會立刻觸發第一次 listen
+        .snapshots(includeMetadataChanges: true)
+        .listen((snapshot) async {
+            // 無論是快取還是雲端資料，都先顯示（不再因為網路錯誤清空列表)
             List<FoodItem> newFoodList = [];
             try {
               for (var doc in snapshot.docs) {
+                if (doc.reference == null) {
+                  print("⚠️ 跳過一筆紀錄：reference 為 null (id=${doc.id})");
+                  continue;
+                }
                 var data = doc.data();
                 String foodName = data['食物名'] ?? '未命名';
                 if (foodName == 'string' || foodName == '未命名') continue;
@@ -357,9 +364,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 double totalFat = 0;
 
                 try {
-                  var ingredientSnapshot = await doc.reference
-                      .collection('ingredients')
-                      .get();
+                  var ingredientSnapshot = await doc.reference.collection('ingredients').get();
 
                   for (var ingDoc in ingredientSnapshot.docs) {
                     var ingData = ingDoc.data();
@@ -388,8 +393,8 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                       ),
                     );
                   }
-                } catch (e) {
-                  print("讀取食材錯誤: $e");
+                } catch (ingredientError) {
+                  print("⚠️ 讀取食材失敗 (文件 $docId): $ingredientError");
                 }
 
                 newFoodList.add(
@@ -411,30 +416,25 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                   ),
                 );
               }
-            } catch (e) {
-              print("處理資料錯誤: $e");
+            } catch (e, stack) {
+              print("🔥 處理資料時發生未預期錯誤: $e\n$stack");
             }
-
-            if (mounted) {
+           if (mounted) {
               setState(() {
                 _foodList = newFoodList;
                 _isLoading = false;
               });
             }
-          },
-          onError: (error) {
+          }, onError: (error) {
             print("Firebase 查詢錯誤: $error");
-            // 🟢 如果是因為權限不足 (Permission Denied)，代表沒有被分享
             if (error.toString().contains("permission")) {
-              if (mounted) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text("您沒有權限查看此家人的資料")));
-              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("您沒有權限查看此家人的資料")),
+              );
             }
+            // 發生錯誤時，也要結束載入狀態
             if (mounted) setState(() => _isLoading = false);
-          },
-        );
+          });
   }
 
   double _parseToDouble(dynamic value) {
@@ -1275,6 +1275,7 @@ class FoodEditDialogContent extends StatefulWidget {
 }
 
 class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   late TextEditingController _nameController;
   late TextEditingController _gramController;
   late TextEditingController _calController;
@@ -1285,6 +1286,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
 
   late List<Ingredient> _ingredients;
   bool _isEditingName = false;
+  bool _isOnline = true; // 預設為有網路狀態
   final List<String> _ingredientsToDelete = [];
   final List<String> _mealOptions = ['早餐', '午餐', '晚餐', '點心'];
   String? _selectedMealType;
@@ -1318,6 +1320,15 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
   @override
   void initState() {
     super.initState();
+    _checkInitialConnection(); // 初始化時檢查一次網路
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      if (mounted) {
+        setState(() {
+          // 只要列表裡面沒有 none，就代表有連線
+          _isOnline = !results.contains(ConnectivityResult.none);
+        });
+      }
+    });
     // 點擊資料(食物)欄位時會跳出視窗，將此食物裡的所有食材等顯示出來
     _nameController = TextEditingController(text: widget.item.name);
     _gramController = TextEditingController();
@@ -1328,7 +1339,6 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _remarksController = TextEditingController(text: widget.item.remark);
     // 透過map和copy()產生全新的食材列表
     _ingredients = widget.item.ingredients.map((e) => e.copy()).toList();
-
     _calculateTotals(); // 確保重新計算數值
 
     // 初始化用餐時段：如果有值就設定，沒值(空字串)就設為 null
@@ -1336,7 +1346,6 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
         _mealOptions.contains(widget.item.mealType)) {
       _selectedMealType = widget.item.mealType;
     }
-
     // 初始化數值
     _gramController.text = widget.item.grams;
     _calController.text = widget.item.calories.replaceAll(' 大卡', '');
@@ -1344,6 +1353,14 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _carbController.text = widget.item.carbs;
     _fatController.text = widget.item.fat;
   }
+  // 檢查目前的網路狀態
+  Future<void> _checkInitialConnection() async {
+    final connectivityResult = await (Connectivity().checkConnectivity());
+    setState(() {
+      // 只要不是 none，就代表有連線 (Wi-Fi 或 行動數據)
+      _isOnline = connectivityResult != ConnectivityResult.none;
+    });
+ }
 
   @override
   void dispose() {
@@ -1354,6 +1371,7 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _carbController.dispose();
     _fatController.dispose();
     _remarksController.dispose();
+    _connectivitySubscription?.cancel();
     super.dispose();
   }
 
@@ -1549,6 +1567,8 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
   Widget build(BuildContext context) {
     Widget imageWidget;
     final String path = widget.item.imagePath;
+    // 判斷：如果熱量是 0 大卡，就代表它是離線存下來、還沒分析過的資料
+    bool isOfflineData = widget.item.calories == "0 大卡" || widget.item.calories == "0";
 
     if (path.startsWith('data:image') ||
         (path.length > 1000 && !path.startsWith('http'))) {
@@ -1735,74 +1755,101 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
             ],
           ),
           const SizedBox(height: 24),
-
-          Row(
-            children: [
-              Expanded(
-                child: _buildLabeledTextField(
-                  '  總克數 (g)',
-                  _gramController,
-                  enabled: false,
+          if (!isOfflineData) ...[
+            // 只有非離線時才會顯示
+            Row(
+              children: [
+                Expanded(child: _buildLabeledTextField('  總克數 (g)', _gramController, enabled: false)),
+                const SizedBox(width: 8),
+                Expanded(child: _buildLabeledTextField('  熱量 (kcal)', _calController, enabled: false)),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _buildLabeledTextField('蛋白質(g)', _proteinController, enabled: false, dotColor: const Color.fromARGB(255, 117, 181, 233))),
+                const SizedBox(width: 8),
+                Expanded(child: _buildLabeledTextField('碳水(g)', _carbController, enabled: false, dotColor: const Color.fromARGB(255, 132, 202, 206))),
+                const SizedBox(width: 8),
+                Expanded(child: _buildLabeledTextField('脂肪(g)', _fatController, enabled: false, dotColor: const Color.fromARGB(255, 245, 190, 118))),
+              ],
+            ),
+          ] else ...[
+            // 離線模式
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                // 如果沒網路(_isOnline為false)，onPressed設為null，按鈕會呈現灰色(不可點擊)
+                onPressed: _isOnline
+                  ? () async {
+                      // 這裡的 item 代表所點擊的那筆歷史紀錄物件
+                      // item.imagePath 存著舊照片的 base64 字串，item.id 存著這筆紀錄在資料庫的 ID
+                      final result = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DashboardPage3(
+                            existingImageBase64: widget.item.imagePath, // 塞入舊照片
+                            documentId: widget.item.id,                 // 塞入舊紀錄的 ID
+                            recordTime: widget.item.createdAt,          // 把這筆紀錄原本在 Firebase 存的時間傳過去
+                          ),
+                        ),
+                      );
+                      // 如果點完確定儲存回來，result 會是 true，就重新整理畫面
+                      if (result == true) {
+                        // 加上外層 context 判定，確保 dialog 關閉後安全執行
+                        if (mounted) { 
+                          // 因為這是在 Dialog 裡面，要先把這個修改詳情視窗也關掉，並傳 true 給最外層主頁面
+                          Navigator.of(context).pop(true);
+                        }
+                      }
+                    }
+                  : null,
+                icon: const Icon(Icons.auto_awesome),
+                label: Text(
+                  _isOnline ? "進行 AI 分析" : "需網路連線以進行分析", 
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)
+                ),
+                style: ElevatedButton.styleFrom(
+                  // 有連線時用主題色，沒連線時會改為灰色
+                  backgroundColor: const Color(0xFF9DC6C2),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey[300], // 反灰後的顏色
+                  disabledForegroundColor: Colors.grey[600],
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildLabeledTextField(
-                  '  熱量 (kcal)',
-                  _calController,
-                  enabled: false,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildLabeledTextField(
-                  '蛋白質(g)',
-                  _proteinController,
-                  enabled: false,
-                  dotColor: const Color.fromARGB(255, 117, 181, 233),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildLabeledTextField(
-                  '碳水(g)',
-                  _carbController,
-                  enabled: false,
-                  dotColor: const Color.fromARGB(255, 132, 202, 206),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildLabeledTextField(
-                  '脂肪(g)',
-                  _fatController,
-                  enabled: false,
-                  dotColor: const Color.fromARGB(255, 245, 190, 118),
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 10),
+            Center(
+              child: Text(
+                _isOnline ? "※ 此為離線紀錄，連上網路後點擊上方按鈕產出分析報告" : "⚠️ 目前無網路連線，分析功能已停用", 
+                style: TextStyle(color: _isOnline ? Colors.grey : Colors.red[300], fontSize: 12)
+              )
+            ),
+          ],
           const SizedBox(height: 24),
           // (1) AI 總結食材清單
-          const Text(
-            'AI 總結食材清單',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
+          if (!isOfflineData) ...[
+            const Text(
+              'AI 總結食材清單',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
 
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _ingredients.length,
-            itemBuilder: (context, index) {
-              return _buildIngredientRow(_ingredients[index], index);
-            },
-          ),
-          // (2) AI 分析建議
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _ingredients.length,
+              itemBuilder: (context, index) {
+                return _buildIngredientRow(_ingredients[index], index);
+              },
+            ),
+            const SizedBox(height: 24), // 增加間距讓畫面平衡
+          ],
+
+          // 下方繼續接「AI 分析建議」的部分
           const Text(
             'AI 分析建議',
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),

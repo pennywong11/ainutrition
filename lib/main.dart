@@ -8,6 +8,7 @@ import 'app_theme.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notifications/notification_handler.dart';
 import 'widget_handler.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // 全局變數，用於儲存當前登入的使用者資訊
 User? currentUser;
@@ -39,6 +40,7 @@ Future<void> _initializeAuth() async {
 // 背景訊息處理
 Future<void> _backgroundMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  
   debugPrint("背景收到訊息: ${message.data}");
 }
 
@@ -56,7 +58,10 @@ Future<void> main() async {
 
   // 3. 初始化 Firebase 核心服務
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true, // 開啟離線持久化
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // 快取大小不限
+  );
   // 4. 初始化身份驗證 (確保在 App 運行前登入完成)
   await _initializeAuth();
   // 5. 初始化通知處理器（包含 FCM 和本地通知）

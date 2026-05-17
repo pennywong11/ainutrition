@@ -9,8 +9,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'dart:html' as html;
-
-// --- 引用原本檔案中定義的資料模型 (如果你有獨立 Model 檔則可省略，否則必須保留) ---
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // 每個"食材"的資料結構 (搬移至此以供報表使用)
 class Ingredient {
@@ -49,7 +49,7 @@ class Ingredient {
   }
 }
 
-// 每個"食物"的資料結構 (搬移至此以供報表列表顯示)
+// 每個"食物"的資料結構
 class FoodItem {
   String id;
   DocumentReference? reference;
@@ -115,7 +115,7 @@ class ReportData {
 // 週報月報頁面
 // ----------------------------------------------
 
-// 分類標籤：週報/月報/自訂範圍(在後面做切換)
+// 分類標籤：週報/月報/自訂範圍(選單做切換)
 enum ReportType { weekly, monthly, custom }
 
 class ReportPage extends StatefulWidget {
@@ -151,36 +151,67 @@ class _ReportPageState extends State<ReportPage> {
   }
 
   // 1. AI 建議生成邏輯(會根據這週/這月/這範圍所吃的熱量平均值去決定在此區顯示哪段文字)
-  String _generateAIFeedback(double avgCal, double p, double c, double f) {
-    if (avgCal == 0) return " 目前尚無數據喔！\n開始記錄餐點，AI 將為您分析飲食趨勢！";
-
-    List<String> suggestions = [];
-
-    if (avgCal > 2300) {
-      suggestions.add(
-        "🚨 本期平均熱量攝取較高 (${avgCal.toStringAsFixed(0)} kcal)，建議控制精緻澱粉份量並增加活動量。",
-      );
-    } else if (avgCal < 1200 && avgCal > 0) {
-      suggestions.add("🚨 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。");
-    } else {
-      suggestions.add(
-        "✅ 平均攝取熱量穩定 (${avgCal.toStringAsFixed(0)} kcal)，請繼續保持良好習慣！",
+  Future<String> _generateAIFeedback({
+    required double avgCal,
+    required double totalDaysInRange,
+    required List<FoodItem> foods,
+  }) async {
+    if (foods.isEmpty) return "目前尚無數據喔！\n開始記錄餐點，AI 將為您分析飲食趨勢！";
+    // 把每一餐轉成結構化文字
+    final StringBuffer mealsText = StringBuffer();
+    for (var food in foods) {
+      final dateStr = food.createdAt != null
+          ? "${food.createdAt!.year}/${food.createdAt!.month}/${food.createdAt!.day} ${food.createdAt!.hour}:${food.createdAt!.minute.toString().padLeft(2, '0')}"
+          : "未知時間";
+      final ingredientNames = food.ingredients
+          .where((ing) => !ing.isDeleted)
+          .map((ing) => ing.name)
+          .join(' '); // 用空格分開
+      mealsText.writeln(
+        "- $dateStr: ${food.name}, 熱量 ${food.calories}, 蛋: ${food.protein}g, 碳: ${food.carbs}g, 脂: ${food.fat}g. 食材: ${ingredientNames.isNotEmpty ? ingredientNames : '無詳細記錄'}",
       );
     }
-    // 根據營養學比例給予適當建議並顯示在對應畫面中
-    double totalMacroCal = (p * 4) + (c * 4) + (f * 9);
-    if (totalMacroCal > 0) {
-      if ((p * 4) / totalMacroCal < 0.15)
-        suggestions.add("🥚 蛋白質比例稍低，可以多補充豆魚蛋肉類。");
-      if ((c * 4) / totalMacroCal > 0.65)
-        suggestions.add("🍚 碳水比例偏高，建議減少精緻糖類攝取。");
-      if ((f * 9) / totalMacroCal > 0.35)
-        suggestions.add("🥑 脂質比例較高，建議多採用清蒸或水煮。");
-    }
 
-    if (suggestions.length == 1) suggestions.add("🌟 您的飲食比例均衡，目前維持得非常好！");
-    return suggestions.join("\n");
+    final prompt = """
+    你是一位親切、專業的台灣臨床營養師。請根據以下使用者在這段期間的飲食數據，生成繁體中文的專業飲食分析與改善建議。
+
+    【飲食數據統計】
+    - 統計天數：${totalDaysInRange.toInt()} 天
+    - 總餐數：${foods.length} 餐
+    - 每日平均攝取熱量：${avgCal.toStringAsFixed(0)} kcal
+
+    【詳細飲食明細】
+    ${mealsText.toString()}
+
+    核心指令：
+    請直接根據上述數據，給出 3 到 5 點「精準、具體、可操作」的建議。
+    請嚴格遵守以下格式規範，不要包含任何前言（例如：很高興為您分析）、不要標題、不要結尾客套話：
+
+    1. 熱量評估：[請用1句話評估平均熱量是否合適，並說出為什麼]
+    2. 營養比例：[請用1句話指出三大營養素的優缺點]
+    3. 飲食多樣性：[請用1句話指出缺乏哪類食材或哪類吃太多]
+    4. 行動指南：[請給出一個明天就能開始做的具體飲食調整動作]
+
+    備註：
+    - 每點之間請換行。
+    - 語氣要溫柔、口語化且專業（多用「您」、「建議您可以嘗試...」）。
+    - 整體總字數控制在 200 字以內，絕對不要冗長。
+    """;
+
+    try {
+      final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash-001',
+        apiKey: apiKey,                
+      );
+      final response = await model.generateContent([Content.text(prompt)]);
+      return response.text ?? '無法取得 AI 建議';
+    } catch (e) {
+      debugPrint('呼叫 Gemini API 失敗: $e');
+      return '暫時無法取得 AI 建議，請稍後再試。';
+    }
   }
+    
 
   // 2. 資料載入邏輯
   Future<void> _loadReportData() async {
@@ -237,7 +268,7 @@ class _ReportPageState extends State<ReportPage> {
         DateTime itemDate = createdAt.toDate();
         DateTime dateKey = DateTime(itemDate.year, itemDate.month, itemDate.day);
         
-        // --- 核心修正：撈取該餐點子集合內的所有食材細節 ---
+        // 取出該餐點子集合內的所有食材細節
         List<Ingredient> ingredientsList = [];
         try {
           var ingredientSnapshot = await doc.reference.collection('ingredients').get();
@@ -295,6 +326,13 @@ class _ReportPageState extends State<ReportPage> {
       int recordedDaysCount = dailyCalories.length;
       double avgCal = tCal / totalDaysInRange;
 
+      // 先呼叫 AI 生成建議（async）
+      final aiText = await _generateAIFeedback(
+        avgCal: avgCal,
+        totalDaysInRange: totalDaysInRange.toDouble(),
+        foods: periodFoods,
+      );
+
       _reportData = ReportData(
         period: _getDateRangeText(),
         totalCalories: tCal,
@@ -309,8 +347,9 @@ class _ReportPageState extends State<ReportPage> {
           'fat': recordedDaysCount > 0 ? tF / recordedDaysCount : 0,
         },
         topCalorieDays: dailyCalories.entries.toList()..sort((a, b) => b.value.compareTo(a.value)),
-        aiFeedback: _generateAIFeedback(avgCal, tP/totalDaysInRange, tC/totalDaysInRange, tF/totalDaysInRange),
+        aiFeedback: aiText,
       );
+
       setState(() {
         _periodFoodList = periodFoods;
         _isLoading = false;
@@ -376,13 +415,13 @@ class _ReportPageState extends State<ReportPage> {
             : "無記錄";
 
         tableData.add([
-          // 欄位 1: 時間 (加粗並置中)
+          // 時間
           pw.Text(
             "${meal.createdAt!.year}/${meal.createdAt!.month}/${meal.createdAt!.day}\n${meal.createdAt!.hour}:${meal.createdAt!.minute.toString().padLeft(2, '0')}",
             textAlign: pw.TextAlign.center,
             style: pw.TextStyle(font: chineseFontBold, fontSize: 10)
           ),
-          // 欄位 2: 餐點內容 (加粗並置中)
+          // 餐點內容
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.center,
             children: [
@@ -390,9 +429,9 @@ class _ReportPageState extends State<ReportPage> {
               pw.Text(meal.name, style: pw.TextStyle(font: chineseFontBold, fontSize: 11)),
             ],
           ),
-          // 欄位 3: 食材 (加粗並置中)
+          // 食材
           pw.Text(ingredientsStr, style: pw.TextStyle(font: chineseFontBold, fontSize: 10), textAlign: pw.TextAlign.center),        
-          // 欄位 4: 熱量 (加粗並置中)
+          // 熱量
           pw.Text("${meal.calories}", style: pw.TextStyle(font: chineseFontBold, fontSize: 10)),
         ]);
       }
@@ -423,7 +462,7 @@ class _ReportPageState extends State<ReportPage> {
                     pw.Container(
                       width: double.infinity, padding: const pw.EdgeInsets.all(20),
                       decoration: pw.BoxDecoration(color: PdfColors.white, borderRadius: pw.BorderRadius.circular(12), border: pw.Border.all(color: black, width: 1.5)),
-                      // AI 建議左對齊修正
+                      // --- AI 建議 ---
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start, 
                         children: cleanFeedback.split('\n').map((line) => pw.Padding(
@@ -433,7 +472,7 @@ class _ReportPageState extends State<ReportPage> {
                       ),
                     ),
                     pw.SizedBox(height: 40),
-                    // --- 詳細餐點紀錄 (表格內容設定加粗與全面置中) ---
+                    // --- 詳細餐點紀錄 ---
                     pw.Text(' ■ 詳細餐點紀錄', style: pw.TextStyle(font: chineseFontBold, fontSize: 18, color: black)),
                     pw.SizedBox(height: 12),
                     pw.TableHelper.fromTextArray(
@@ -563,7 +602,16 @@ class _ReportPageState extends State<ReportPage> {
           Row(children: [Icon(Icons.auto_awesome, color: Colors.teal[600], size: 18), const SizedBox(width: 8), const Text('AI 飲食建議', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF2D4F4B)))]),
           const Divider(height: 30),
           if (_reportData == null || _reportData!.totalCalories == 0)
-            SizedBox(height: isMobile ? 60 : 78, child: Center(child: Text(_generateAIFeedback(0, 0, 0, 0), textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, height: 1.5))))
+            SizedBox(
+              height: isMobile ? 60 : 78,
+              child: Center(
+                child: Text(
+                  "目前尚無數據喔！\n開始記錄餐點，AI 將為您分析飲食趨勢！",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, height: 1.5),
+                ),
+              ),
+            )
           else
             Text(_reportData?.aiFeedback ?? "分析中...", style: const TextStyle(fontSize: 15, height: 1.5)),
         ]),
@@ -610,7 +658,7 @@ class _ReportPageState extends State<ReportPage> {
     }
 
     try {
-      // 2. 判斷是否為 Base64 格式 (通常你拍的照片是這種)
+      // 2. 判斷是否為 Base64 格式 
       if (path.startsWith('data:image') || path.contains(',') || path.length > 100) {
         final base64String = path.contains(',') ? path.split(',').last : path;
         return ClipRRect(
@@ -618,9 +666,9 @@ class _ReportPageState extends State<ReportPage> {
           child: Image.memory(
             base64Decode(base64String),
             fit: BoxFit.cover,
-            width: 50, // 稍微加大一點讓你看得更清楚
+            width: 50,
             height: 50,
-            // 如果 Base64 解析失敗，還有一個保險方案顯示圖示
+            // 如果 Base64 解析失敗，還有其他方式顯示圖示
             errorBuilder: (context, error, stackTrace) => _buildImagePlaceholder(mealType),
           ),
         );
@@ -642,7 +690,7 @@ class _ReportPageState extends State<ReportPage> {
       debugPrint("UI圖片顯示錯誤: $e");
     }
 
-    // 4. 最後的保險：顯示預設圖示
+    // 4. 顯示預設圖示
     return _buildImagePlaceholder(mealType);
   }
 
@@ -707,7 +755,24 @@ class _ReportPageState extends State<ReportPage> {
         bool isMobile = constraints.maxWidth < 700;
         return SingleChildScrollView(padding: const EdgeInsets.all(16), child: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1000), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           if (isMobile) ...[_card1(), const SizedBox(height: 16), _card2(), const SizedBox(height: 16), _card3(), const SizedBox(height: 16), _card4(isMobile: true), const SizedBox(height: 16), _card5(isMobile: true)]
-          else ...[Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(flex: 1, child: _card1()), const SizedBox(width: 16), Expanded(flex: 1, child: Column(children: [_card2(), const SizedBox(height: 16), _card3()]))]), const SizedBox(height: 16), Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _card4(isMobile: false)), const SizedBox(width: 16), Expanded(child: _card5(isMobile: false))])]
+          else ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // 左欄
+            Expanded(flex: 1, child: Column(children: [
+              _card1(),
+              const SizedBox(height: 16),  // 跟右欄一樣的間距
+              _card4(isMobile: false),
+            ])),
+            const SizedBox(width: 16),
+            // 右欄
+            Expanded(flex: 1, child: Column(children: [
+              _card2(),
+              const SizedBox(height: 16),
+              _card3(),
+              const SizedBox(height: 16),
+              _card5(isMobile: false),
+            ])),
+          ])]
         ]))));
       }),
     );
