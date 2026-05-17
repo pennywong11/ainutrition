@@ -1,8 +1,11 @@
-// settings.dart
+// lib/settings.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import 'home/app_mode.dart';
+import 'home/nutrition_widgets.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -31,7 +34,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _setupUserDoc();
   }
-
+  
   Future<void> _setupUserDoc() async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
@@ -117,9 +120,9 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) {
         return AlertDialog(
           content: const Text(
-            "確定要註銷帳號？此操作無法復原！",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+            "確定要註銷帳號？此操作無法復原！", 
+            style: TextStyle(fontWeight: FontWeight.bold)
+            ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -134,7 +137,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 "確定",
                 style: TextStyle(
                   color: Color.fromARGB(255, 233, 98, 88),
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.bold
                 ),
               ),
             ),
@@ -300,7 +303,9 @@ class _SettingsPageState extends State<SettingsPage> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('設定')),
+      appBar: AppBar(
+        title: const Text('設定'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
@@ -328,7 +333,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: cs.background,
+                            color: cs.surface,
                             shape: BoxShape.circle,
                             border: Border.all(
                               color: cs.primary.withOpacity(0.2),
@@ -347,7 +352,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                isLoggedIn ? user!.email! : "未登入使用者",
+                                isLoggedIn ? user.email! : "未登入使用者",
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -399,12 +404,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
 
               const SizedBox(height: 18),
-              const Text(
-                '個人健康資料',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
+              _sectionTitle('個人健康資料'),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -493,7 +493,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
@@ -505,7 +505,39 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
+              _sectionTitle('其他設定'),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        _sectionLabel('簡單模式'),
+                        InfoTooltip(
+                          message: '啟用簡單模式後，應用程式將顯示簡化的營養資訊和進度條。',
+                        ),
+                        const Spacer(),
+                        Switch(
+                          value: context.watch<AppMode>().isSimple,
+                          onChanged: (value) {
+                            context.read<AppMode>().toggle();
+                          },
+                          activeTrackColor: cs.primary,
+                          activeThumbColor: Colors.white,
+                        )
+                      ]
+                    )
+                  ],
+                ),
+              ),
+                        
+
+              const SizedBox(height: 18),
               _sectionTitle('應用資訊'),
               _infoRow('版本', '1.0.0'),
               _infoRow('條款', '隱私權政策與使用條款'),
@@ -515,8 +547,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 stream: FirebaseAuth.instance.authStateChanges(),
                 builder: (context, snapshot) {
                   final user = snapshot.data;
-                  if (user == null || user.isAnonymous)
-                    return const SizedBox.shrink();
+                  if (user == null || user.isAnonymous) return const SizedBox.shrink();
 
                   return Column(
                     children: [
@@ -535,15 +566,13 @@ class _SettingsPageState extends State<SettingsPage> {
                               onPressed: deleteAccount,
                               child: const Text(
                                 '註銷帳號',
-                                style: TextStyle(
-                                  color: Color.fromARGB(255, 233, 98, 88),
-                                ),
+                                style: TextStyle(color: Color.fromARGB(255, 233, 98, 88)),
                               ),
                             ),
                           ],
                         ),
                       ),
-
+                      
                       const SizedBox(height: 20),
                     ],
                   );

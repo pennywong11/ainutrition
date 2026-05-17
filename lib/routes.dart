@@ -1,16 +1,15 @@
 // lib/routes.dart
 import 'package:flutter/material.dart';
-import 'history_page.dart';
-import 'analysisfood.dart';
+import 'home/mode_selection.dart';
 import 'auth.dart';
 import 'admin.dart';
-import 'ana.dart';
-import 'ana2.dart';
+import 'ana2.dart'; // 分析頁
 import 'settings.dart';
 import 'pages/family_settings_page.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
-  '/': (context) => const NutritionHomePage(), // 主畫面
+  // '/': (context) => const NutritionHomePage(), // 主畫面
+  '/': (context) => const ModeSelection(), // 模式選擇頁
   '/auth': (context) => const AuthPage(), // 登入/註冊頁
   '/settings': (context) => const SettingsPage(), // 設定頁
   '/admin': (context) => const AdminPage(), // 管理頁
