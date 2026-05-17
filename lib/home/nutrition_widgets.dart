@@ -524,7 +524,7 @@ class _FoodListTile extends StatelessWidget {
   final FoodItem     item;
   final VoidCallback onTap;
   final VoidCallback onDelete;
-  final bool         isReadOnly;
+  final bool         isReadOnly; 
 
   @override
   Widget build(BuildContext context) {
@@ -551,14 +551,16 @@ class _FoodListTile extends StatelessWidget {
                 ],
               ),
             ),
-            SizedBox(
-              width: 40,
-              child: IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    color: Color.fromARGB(255, 26, 24, 23)),
-                onPressed: onDelete,
+            // 唯讀時不顯示刪除按鈕
+            if (!isReadOnly)
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      color: Color.fromARGB(255, 26, 24, 23)),
+                  onPressed: onDelete,
+                ),
               ),
-            ),
           ],
         ),
       ),
