@@ -166,7 +166,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
 
         // 3. 畫面渲染完後，直接自動調用 AI 分析函式
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _analyzeImage();
+          _showSnackBar('已成功載入歷史照片，您可以輸入提示詞後點擊「開始分析」！', isSuccess: true);
         });
       } catch (e) {
         print("解碼舊照片失敗: $e");
