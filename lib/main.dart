@@ -1,5 +1,5 @@
-import 'routes.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -8,7 +8,9 @@ import 'app_theme.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notifications/notification_handler.dart';
 import 'widget_handler.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'routes.dart';
+import 'package:provider/provider.dart';
+import 'home/app_mode.dart';
 
 // 全局變數，用於儲存當前登入的使用者資訊
 User? currentUser;
@@ -17,7 +19,6 @@ User? currentUser;
 
 // 負責初始化 Firebase Auth，並確保使用固定的匿名 UID
 Future<void> _initializeAuth() async {
-
   // 1. 檢查是否有現有的使用者登入狀態
   currentUser = FirebaseAuth.instance.currentUser;
 
@@ -40,7 +41,6 @@ Future<void> _initializeAuth() async {
 // 背景訊息處理
 Future<void> _backgroundMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-  
   debugPrint("背景收到訊息: ${message.data}");
 }
 
@@ -58,10 +58,9 @@ Future<void> main() async {
 
   // 3. 初始化 Firebase 核心服務
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true, // 開啟離線持久化
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // 快取大小不限
-  );
+  //FirebaseFirestore.instance.settings = const Settings(
+  //  localCacheSettings: PersistentCacheSettings(), // 預設即開啟離線持久化與無上限快取
+  //);
   // 4. 初始化身份驗證 (確保在 App 運行前登入完成)
   await _initializeAuth();
   // 5. 初始化通知處理器（包含 FCM 和本地通知）
@@ -73,7 +72,12 @@ Future<void> main() async {
   //await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
   //final userCredential = await FirebaseAuth.instance.signInAnonymously();
   //print('匿名使用者登入成功，UID: ${userCredential.user?.uid}');
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [ChangeNotifierProvider(create: (_) => AppMode())],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -81,11 +85,10 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    WidgetHandler.checkInitialRoute(); // 檢查是否有初始路由需要跳轉
     return MaterialApp(
       title: 'aiNutrition',
       theme: AppTheme.theme,
-      initialRoute: '/',
+      initialRoute: '/', // 預設進入模式選擇頁
       routes: appRoutes,
       navigatorKey: WidgetHandler.navigatorKey, // 設定全局導航鍵
       debugShowCheckedModeBanner: false, // 隱藏右上角的DEBUG標籤
