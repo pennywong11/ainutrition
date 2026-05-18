@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async'; // 管理StreamSubscription(監聽器的開關)
 import 'package:fl_chart/fl_chart.dart'; //圓餅圖套件
-import 'package:firebase_core/firebase_core.dart'; //Firebase核心
 import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料庫功能
 import 'package:firebase_auth/firebase_auth.dart';
 import 'report_page.dart';
@@ -10,87 +9,12 @@ import 'ana2.dart';
 import 'dart:convert'; // 添加這行，為了 base64Decode
 import 'dart:typed_data'; // 添加這行，為了 Uint8List
 // 通知欄
-import 'notifications/notification_handler.dart';
 import 'notifications/notification_ui.dart';
 import 'notifications/notification_bell.dart';
 // 🟢 引入切換按鈕元件 (家庭共享功能)
 import '../widgets/family_switcher.dart';
-// 匯入網路檢查工具
-import 'package:connectivity_plus/connectivity_plus.dart';
-
-// 資料模型區(Models)：定義資料的樣子
-// 每個"食物"的資料結構：食物名稱、熱量、圖片、蛋白質等等欄位
-class FoodItem {
-  String id;
-  DocumentReference? reference;
-  String name;
-  String calories;
-  String imagePath;
-  String grams;
-  String protein;
-  String carbs;
-  String fat;
-  List<Ingredient> ingredients;
-  String remark;
-  String aiSuggestion;
-  String mealType;
-  DateTime? createdAt; // 新增"建立時間"
-
-  FoodItem({
-    this.reference,
-    required this.id,
-    required this.name,
-    required this.calories,
-    required this.imagePath,
-    this.grams = '0',
-    this.protein = '0',
-    this.carbs = '0',
-    this.fat = '0',
-    required this.ingredients,
-    this.remark = '',
-    this.aiSuggestion = '',
-    this.mealType = '',
-    this.createdAt,
-  });
-}
-
-// 每個"食材"的資料結構
-class Ingredient {
-  final String? id;
-  final String name;
-  final double grams;
-  final double calories;
-  final double carbs;
-  final double protein;
-  final double fat;
-
-  bool isDeleted = false; // 軟刪除標記
-
-  Ingredient({
-    this.id,
-    required this.name,
-    required this.grams,
-    required this.calories,
-    required this.carbs,
-    required this.protein,
-    required this.fat,
-  });
-
-  Ingredient copy() {
-    var newIngredient = Ingredient(
-      id: this.id,
-      name: this.name,
-      grams: this.grams,
-      calories: this.calories,
-      carbs: this.carbs,
-      protein: this.protein,
-      fat: this.fat,
-    );
-    // 複製目前的刪除狀態 (通常初始是 false )
-    newIngredient.isDeleted = this.isDeleted;
-    return newIngredient;
-  }
-}
+// Models
+import '../models.dart';
 
 // 用來暫存"今日總營養素"的小工具類別
 class _DailyTotals {
@@ -98,33 +22,6 @@ class _DailyTotals {
   double protein = 0;
   double carbs = 0;
   double fat = 0;
-}
-
-// 報表數據結構：定義"報表"需要顯示的總和數據
-class ReportData {
-  final String period;
-  final double totalCalories;
-  final double totalProtein;
-  final double totalCarbs;
-  final double totalFat;
-  final int totalMeals;
-  final double totalWeight;
-  final Map<String, double> dailyAverages;
-  final List<MapEntry<DateTime, double>> topCalorieDays;
-  final String aiFeedback;
-
-  ReportData({
-    required this.period,
-    required this.totalCalories,
-    required this.totalProtein,
-    required this.totalCarbs,
-    required this.totalFat,
-    required this.totalMeals,
-    required this.totalWeight,
-    required this.dailyAverages,
-    required this.topCalorieDays,
-    required this.aiFeedback,
-  });
 }
 
 // ----------------------------------------------
@@ -505,22 +402,25 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         // 🟢 修改標題：顯示目前正在看誰
-        title: _targetName == "我自己"
-            ? null
-            : Text("正在檢視: $_targetName", style: const TextStyle(fontSize: 16)),
+        // title: _targetName == "我自己"
+        //     ? null
+        //     : Text("正在檢視: $_targetName", style: const TextStyle(fontSize: 16)),
         actions: [
           // 1. 家庭切換器 (來自 familysetting0402)
-          FamilySwitcher(
-            currentName: _targetName,
-            onSelected: (uid, name) {
-              setState(() {
-                _targetUid = uid;
-                _targetName = name;
-                _isLoading = true; // 切換時顯示 loading
-              });
-              // 重新監聽資料流
-              _listenToFirebaseData();
-            },
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FamilySwitcher(
+              currentName: _targetName,
+              onSelected: (uid, name) {
+                setState(() {
+                  _targetUid = uid;
+                  _targetName = name;
+                    _isLoading = true; // 切換時顯示 loading
+                });
+                // 重新監聽資料流
+                _listenToFirebaseData();
+              },
+            ),
           ),
 
           // 2. 通知鈴鐺 (來自 main 分支)
