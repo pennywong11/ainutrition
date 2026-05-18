@@ -100,10 +100,15 @@ class FoodAnalysisResult {
 // -----------------------------------------------------------------------------
 
 class DashboardPage3 extends StatefulWidget {
-  final String? existingImageBase64; 
+  final String? existingImageBase64;
   final String? documentId;
   final DateTime? recordTime; // 用來接收舊時間
-  const DashboardPage3({super.key, this.existingImageBase64, this.documentId, this.recordTime,});
+  const DashboardPage3({
+    super.key,
+    this.existingImageBase64,
+    this.documentId,
+    this.recordTime,
+  });
 
   @override
   State<DashboardPage3> createState() => _DashboardPage3State();
@@ -150,17 +155,18 @@ class _DashboardPage3State extends State<DashboardPage3> {
 
     // 🎯 檢查是不是從歷史紀錄「補分析」帶著舊照片點進來的
     _userSelectedTime = widget.recordTime ?? DateTime.now();
-    if (widget.existingImageBase64 != null && widget.existingImageBase64!.isNotEmpty) {
+    if (widget.existingImageBase64 != null &&
+        widget.existingImageBase64!.isNotEmpty) {
       try {
         // 1. 將傳進來的 Base64 字串還原成圖片位元組並塞給 _imageBytes
         _imageBytes = base64Decode(widget.existingImageBase64!);
-        
+
         // 2. 既然有舊照片，直接將模式定為正常的 'completed' 分析模式
         _currentMode = 'completed';
 
         // 3. 畫面渲染完後，直接自動調用 AI 分析函式
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _analyzeImage(); 
+          _showSnackBar('已成功載入歷史照片，您可以輸入提示詞後點擊「開始分析」！', isSuccess: true);
         });
       } catch (e) {
         print("解碼舊照片失敗: $e");
@@ -508,7 +514,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
               child: Image.memory(
                 bytes,
                 height: 200,
-                width: double.infinity,
+                width: MediaQuery.sizeOf(context).width * 0.8,
                 fit: BoxFit.cover,
               ),
             ),
@@ -519,7 +525,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context, false),
                     style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
+                      minimumSize: const Size(0, 50),
                       foregroundColor: Colors.grey,
                     ),
                     child: const Text('重拍'),
@@ -530,7 +536,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
                   child: ElevatedButton(
                     onPressed: () => Navigator.pop(context, true),
                     style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
+                      minimumSize: const Size(0, 50),
                     ),
                     child: const Text('確定'),
                   ),
@@ -838,15 +844,15 @@ class _DashboardPage3State extends State<DashboardPage3> {
       // 🎯 判斷：如果是從歷史紀錄過來的，就用舊的 documentId；如果是新拍的，才自動生成新的 documentId
       final recordRef = widget.documentId != null
           ? FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUser.uid)
-              .collection('analysis_records')
-              .doc(widget.documentId) // 使用舊的 documentId，這樣等一下寫入就會直接覆蓋它
+                .collection('users')
+                .doc(currentUser.uid)
+                .collection('analysis_records')
+                .doc(widget.documentId) // 使用舊的 documentId，這樣等一下寫入就會直接覆蓋它
           : FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUser.uid)
-              .collection('analysis_records')
-              .doc();
+                .collection('users')
+                .doc(currentUser.uid)
+                .collection('analysis_records')
+                .doc();
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
@@ -919,32 +925,32 @@ class _DashboardPage3State extends State<DashboardPage3> {
           );
         },
       );
-          } catch (e) {
-            if (e.toString().contains("larger than")) {
-              _showSnackBar('圖片過大，無法儲存');
-            } else {
-              _showSnackBar('儲存失敗: $e');
-            }
-          } finally {
-            if (mounted) setState(() => _isAnalyzing = false);
-          }
-        }
+    } catch (e) {
+      if (e.toString().contains("larger than")) {
+        _showSnackBar('圖片過大，無法儲存');
+      } else {
+        _showSnackBar('儲存失敗: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isAnalyzing = false);
+    }
+  }
 
-        String _formatDateTime(DateTime dt) {
-          String twoDigits(int n) => n.toString().padLeft(2, '0');
-          return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
-        }
+  String _formatDateTime(DateTime dt) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
+  }
 
-        void _showSnackBar(String message, {bool isSuccess = false}) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message),
-              duration: const Duration(seconds: 3),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+  void _showSnackBar(String message, {bool isSuccess = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
 
   // =========================================================================
   // UI 佈局核心邏輯

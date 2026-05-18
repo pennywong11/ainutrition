@@ -1,4 +1,4 @@
-// lib/model.dart
+// lib/models.dart
 import 'package:cloud_firestore/cloud_firestore.dart'; // 引入Firestore資料庫功能
 
 // 報表數據結構
@@ -99,4 +99,3 @@ class Ingredient {
     return newIngredient;
   }
 }
-
