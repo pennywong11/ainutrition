@@ -41,6 +41,7 @@ Future<void> _initializeAuth() async {
 // 背景訊息處理
 Future<void> _backgroundMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
+  
   debugPrint("背景收到訊息: ${message.data}");
 }
 
@@ -58,7 +59,10 @@ Future<void> main() async {
 
   // 3. 初始化 Firebase 核心服務
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true, // 開啟離線持久化
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // 快取大小不限
+  );
   // 4. 初始化身份驗證 (確保在 App 運行前登入完成)
   await _initializeAuth();
   // 5. 初始化通知處理器（包含 FCM 和本地通知）

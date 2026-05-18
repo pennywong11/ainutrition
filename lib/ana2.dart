@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart'; // 引入環境變數套件
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:image_picker/image_picker.dart';
-
+import 'history_page.dart'; // 引入歷史紀錄頁面，讓我們可以從分析頁面點進去看歷史紀錄細節
 import '../services/nutrition_service.dart';
 
 // -----------------------------------------------------------------------------
@@ -100,7 +100,10 @@ class FoodAnalysisResult {
 // -----------------------------------------------------------------------------
 
 class DashboardPage3 extends StatefulWidget {
-  const DashboardPage3({super.key});
+  final String? existingImageBase64; 
+  final String? documentId;
+  final DateTime? recordTime; // 用來接收舊時間
+  const DashboardPage3({super.key, this.existingImageBase64, this.documentId, this.recordTime,});
 
   @override
   State<DashboardPage3> createState() => _DashboardPage3State();
@@ -145,10 +148,29 @@ class _DashboardPage3State extends State<DashboardPage3> {
     // 初始化預設時間為當前時間
     _userSelectedTime = DateTime.now();
 
-    // 🟢 自動啟動模式選擇選單
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showModeSelection();
-    });
+    // 🎯 檢查是不是從歷史紀錄「補分析」帶著舊照片點進來的
+    _userSelectedTime = widget.recordTime ?? DateTime.now();
+    if (widget.existingImageBase64 != null && widget.existingImageBase64!.isNotEmpty) {
+      try {
+        // 1. 將傳進來的 Base64 字串還原成圖片位元組並塞給 _imageBytes
+        _imageBytes = base64Decode(widget.existingImageBase64!);
+        
+        // 2. 既然有舊照片，直接將模式定為正常的 'completed' 分析模式
+        _currentMode = 'completed';
+
+        // 3. 畫面渲染完後，直接自動調用 AI 分析函式
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _analyzeImage(); 
+        });
+      } catch (e) {
+        print("解碼舊照片失敗: $e");
+      }
+    } else {
+      // 🎯 如果是原本一般主頁大加號按進來的（沒有舊照片），才彈出原本的選擇選單
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showModeSelection();
+      });
+    }
   }
 
   @override
@@ -705,7 +727,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
               }
               searchTerms.insert(0, name);
 
-              List<FoodItem> matches = [];
+              var matches = [];
               for (var term in searchTerms) {
                 var currentMatches = await _nutritionService.searchFood(term);
 
@@ -802,6 +824,8 @@ class _DashboardPage3State extends State<DashboardPage3> {
       }
     }
 
+    // 🎯 安全鎖 1：確保頁面活著才轉圈圈
+    if (!mounted) return;
     setState(() => _isAnalyzing = true);
 
     try {
@@ -811,11 +835,18 @@ class _DashboardPage3State extends State<DashboardPage3> {
         throw "圖片壓縮後仍然過大，請嘗試重拍更簡單的畫面";
       }
 
-      final recordRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('analysis_records')
-          .doc();
+      // 🎯 判斷：如果是從歷史紀錄過來的，就用舊的 documentId；如果是新拍的，才自動生成新的 documentId
+      final recordRef = widget.documentId != null
+          ? FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .collection('analysis_records')
+              .doc(widget.documentId) // 使用舊的 documentId，這樣等一下寫入就會直接覆蓋它
+          : FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .collection('analysis_records')
+              .doc();
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
 
@@ -825,7 +856,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
 
       final recordData = {
         'AI分析建議': _analysisResult!.aiSummary,
-        '食物名': _analysisResult!.dishName,
+        '食物名': _analysisResult!.dishName, // 🟢 沿用妳原本的食物名欄位
         '圖片_base64': base64Image,
         'status': _analysisResult!.status,
         'created_at': Timestamp.fromDate(_analysisResult!.analyzedTime),
@@ -836,7 +867,13 @@ class _DashboardPage3State extends State<DashboardPage3> {
         'total_fat': round2(_analysisResult!.totalFat),
       };
 
-      batch.set(recordRef, recordData);
+      // 🎯 日期守護防線：如果是歷史補分析，強行移除日期更新欄位，免得 4/22 被覆蓋成今天！
+      if (widget.documentId != null) {
+        recordData.remove('created_at');
+        recordData.remove('analyzed_date_string');
+      }
+
+      batch.set(recordRef, recordData, SetOptions(merge: true));
 
       for (var ingredient in _analysisResult!.ingredients) {
         if (ingredient.isSelected) {
@@ -849,51 +886,65 @@ class _DashboardPage3State extends State<DashboardPage3> {
 
       await batch.commit();
 
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => AlertDialog(
+      // 🎯 安全鎖 3：彈出對話框，並確保點擊 OK 一定會跳轉
+      if (!mounted) return;
+      setState(() => _isAnalyzing = false);
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
             title: const Text('儲存成功'),
             content: const Text('紀錄已儲存。'),
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.of(context).pop(true);
+                  // 1. 先關閉對話框
+                  Navigator.of(dialogContext).pop();
+                  // 2. 等待一幀，確保對話框完全銷毀後再跳轉
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (context) => const NutritionHomePage(),
+                        ),
+                        (route) => false,
+                      );
+                    }
+                  });
                 },
                 child: const Text('OK'),
               ),
             ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (e.toString().contains("larger than")) {
-        _showSnackBar('圖片過大，無法儲存');
-      } else {
-        _showSnackBar('儲存失敗: $e');
-      }
-    } finally {
-      if (mounted) setState(() => _isAnalyzing = false);
-    }
-  }
+          );
+        },
+      );
+          } catch (e) {
+            if (e.toString().contains("larger than")) {
+              _showSnackBar('圖片過大，無法儲存');
+            } else {
+              _showSnackBar('儲存失敗: $e');
+            }
+          } finally {
+            if (mounted) setState(() => _isAnalyzing = false);
+          }
+        }
 
-  String _formatDateTime(DateTime dt) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
-  }
+        String _formatDateTime(DateTime dt) {
+          String twoDigits(int n) => n.toString().padLeft(2, '0');
+          return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
+        }
 
-  void _showSnackBar(String message, {bool isSuccess = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
+        void _showSnackBar(String message, {bool isSuccess = false}) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
 
   // =========================================================================
   // UI 佈局核心邏輯
