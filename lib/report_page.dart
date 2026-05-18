@@ -8,11 +8,13 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:convert';
-// Web-only 'dart:html' removed; use printing package for downloads
+import 'dart:html' as html;
 
 import '../models.dart';
-import 'home/nutrition_helpers.dart';
+import '../home/nutrition_helpers.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
 // 報表類型
@@ -23,6 +25,32 @@ enum ReportType { weekly, monthly, custom }
 // ════════════════════════════════════════════════════════════════════════════
 // 資料層：ReportLogic
 // ════════════════════════════════════════════════════════════════════════════
+
+class ReportData {
+  final String   period;
+  final double   totalCalories;
+  final double   totalProtein;
+  final double   totalCarbs;
+  final double   totalFat;
+  final int      totalMeals;
+  final double   totalWeight;
+  final Map<String, double>              dailyAverages;
+  final List<MapEntry<DateTime, double>> topCalorieDays;
+  final String   aiFeedback;
+
+  const ReportData({
+    required this.period,
+    required this.totalCalories,
+    required this.totalProtein,
+    required this.totalCarbs,
+    required this.totalFat,
+    required this.totalMeals,
+    required this.totalWeight,
+    required this.dailyAverages,
+    required this.topCalorieDays,
+    required this.aiFeedback,
+  });
+}
 
 class ReportLogic {
   ReportLogic({required this.userId, DateTime? initialDate})
@@ -59,7 +87,6 @@ class ReportLogic {
   // ── 資料載入 ───────────────────────────────────────────────────────────────
 
   Future<void> load() async {
-    debugPrint('userId: "$userId"');
     isLoading = true;
 
     final now = DateTime.now();
@@ -179,11 +206,13 @@ class ReportLogic {
         },
         topCalorieDays: dailyCals.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value)),
-        aiFeedback: _generateFeedback(
-          tCal / totalDays, tP / totalDays, tC / totalDays, tF / totalDays),
+        aiFeedback: await _generateFeedback(
+          avgCal:           tCal / totalDays,
+          totalDaysInRange: totalDays.toDouble(),
+          foods:            foods,
+        ),
       );
       foodList = foods;
-      debugPrint('抓到 ${snap.docs.length} 筆，範圍: $start → $end');
     } catch (e) {
       debugPrint('ReportLogic.load 錯誤: $e');
     }
@@ -220,30 +249,70 @@ class ReportLogic {
     );
   }
 
-  // ── AI 建議 ────────────────────────────────────────────────────────────────
+  // ── AI 建議（Gemini API）─────────────────────────────────────────────────────
 
-  String _generateFeedback(double avgCal, double p, double c, double f) {
-    if (avgCal == 0) return '目前尚無數據喔！\n開始記錄餐點，AI 將為您分析飲食趨勢！';
-
-    final buf = <String>[];
-
-    if (avgCal > 2300) {
-      buf.add('🚨 本期平均熱量攝取較高 (${avgCal.toStringAsFixed(0)} kcal)，建議控制精緻澱粉份量並增加活動量。');
-    } else if (avgCal < 1200) {
-      buf.add('🚨 平均攝取熱量偏低，請確保攝取充足能量以維持基礎代謝。');
-    } else {
-      buf.add('✅ 平均攝取熱量穩定 (${avgCal.toStringAsFixed(0)} kcal)，請繼續保持良好習慣！');
+  Future<String> _generateFeedback({
+    required double        avgCal,
+    required double        totalDaysInRange,
+    required List<FoodItem> foods,
+  }) async {
+    if (foods.isEmpty) {
+      return '目前尚無數據喔！\n開始記錄餐點，AI 將為您分析飲食趨勢！';
     }
 
-    final total = (p * 4) + (c * 4) + (f * 9);
-    if (total > 0) {
-      if ((p * 4) / total < 0.15) buf.add('🥚 蛋白質比例稍低，可以多補充豆魚蛋肉類。');
-      if ((c * 4) / total > 0.65) buf.add('🍚 碳水比例偏高，建議減少精緻糖類攝取。');
-      if ((f * 9) / total > 0.35) buf.add('🥑 脂質比例較高，建議多採用清蒸或水煮。');
+    // 把每一餐轉成結構化文字
+    final mealsText = StringBuffer();
+    for (final food in foods) {
+      final dateStr = food.createdAt != null
+          ? '${food.createdAt!.year}/${food.createdAt!.month}/${food.createdAt!.day} '
+            '${food.createdAt!.hour}:${food.createdAt!.minute.toString().padLeft(2, '0')}'
+          : '未知時間';
+      final ingNames = food.ingredients
+          .where((i) => !i.isDeleted)
+          .map((i) => i.name)
+          .join(' ');
+      mealsText.writeln(
+        '- $dateStr: ${food.name}, 熱量 ${food.calories}, '
+        '蛋: ${food.protein}g, 碳: ${food.carbs}g, 脂: ${food.fat}g. '
+        '食材: ${ingNames.isNotEmpty ? ingNames : '無詳細記錄'}',
+      );
     }
 
-    if (buf.length == 1) buf.add('🌟 您的飲食比例均衡，目前維持得非常好！');
-    return buf.join('\n');
+    final prompt = '''
+你是一位親切、專業的台灣臨床營養師。請根據以下使用者在這段期間的飲食數據，生成繁體中文的專業飲食分析與改善建議。
+
+【飲食數據統計】
+- 統計天數：${totalDaysInRange.toInt()} 天
+- 總餐數：${foods.length} 餐
+- 每日平均攝取熱量：${avgCal.toStringAsFixed(0)} kcal
+
+【詳細飲食明細】
+${mealsText.toString()}
+
+核心指令：
+請直接根據上述數據，給出 3 到 5 點「精準、具體、可操作」的建議。
+請嚴格遵守以下格式規範，不要包含任何前言（例如：很高興為您分析）、不要標題、不要結尾客套話：
+
+1. 熱量評估：[請用1句話評估平均熱量是否合適，並說出為什麼]
+2. 營養比例：[請用1句話指出三大營養素的優缺點]
+3. 飲食多樣性：[請用1句話指出缺乏哪類食材或哪類吃太多]
+4. 行動指南：[請給出一個明天就能開始做的具體飲食調整動作]
+
+備註：
+- 每點之間請換行。
+- 語氣要溫柔、口語化且專業（多用「您」、「建議您可以嘗試...」）。
+- 整體總字數控制在 200 字以內，絕對不要冗長。
+''';
+
+    try {
+      final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+      final model  = GenerativeModel(model: 'gemini-2.5-flash', apiKey: apiKey);
+      final res    = await model.generateContent([Content.text(prompt)]);
+      return res.text ?? '無法取得 AI 建議';
+    } catch (e) {
+      debugPrint('呼叫 Gemini API 失敗: $e');
+      return '暫時無法取得 AI 建議，請稍後再試。';
+    }
   }
 
   // ── 靜態輔助 ───────────────────────────────────────────────────────────────
@@ -489,8 +558,12 @@ class _ReportPageState extends State<ReportPage>
       ));
 
       final bytes = await pdf.save();
-      // Use the printing package to handle sharing/saving the PDF across platforms
-      await Printing.sharePdf(bytes: bytes, filename: '營養報告.pdf');
+      final blob  = html.Blob([bytes], 'application/pdf');
+      final url   = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', '營養報告.pdf')
+        ..click();
+      html.Url.revokeObjectUrl(url);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -508,6 +581,10 @@ class _ReportPageState extends State<ReportPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: const Text('營養報告'),
         actions: [
           IconButton(
