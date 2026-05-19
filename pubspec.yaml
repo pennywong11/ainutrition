@@ -34,14 +34,10 @@ dependencies:
   firebase_messaging: ^16.1.0
   flutter_local_notifications: ^19.5.0
   provider: ^6.1.1
-<<<<<<< HEAD
-  share_plus: ^10.0.0
-  connectivity_plus: ^7.1.1
-=======
   share_plus: ^12.0.0
   connectivity_plus: ^7.1.1
   universal_html: ^2.3.0
->>>>>>> main
+
 
 dev_dependencies:
   flutter_test:

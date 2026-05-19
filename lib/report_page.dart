@@ -14,10 +14,10 @@ import 'dart:convert';
 // import 'dart:html' as html;
 
 // 🟢 跨平台支援 (完美融合 HEAD 的存檔邏輯)
-import 'dart:html' as html;
-import 'package:flutter/foundation.dart'; // 引入 kIsWeb 判斷
-import 'dart:io'; // 給手機端存檔用
-import 'package:path_provider/path_provider.dart'; // 取得手機路徑
+// import 'dart:html' as html;
+// import 'package:flutter/foundation.dart'; // 引入 kIsWeb 判斷
+// import 'dart:io'; // 給手機端存檔用
+// import 'package:path_provider/path_provider.dart'; // 取得手機路徑
 import 'package:share_plus/share_plus.dart'; // 呼叫手機的原生分享/存檔
 import '../models.dart';
 import '../home/nutrition_helpers.dart';
@@ -112,8 +112,23 @@ class ReportLogic {
     }
 
     // 🔒 妳寫的黃金防線：定死時分秒，消除任何重新整理網頁時產生的微秒差！
-    final DateTime finalStartDate = DateTime(start.year, start.month, start.day, 0, 0, 0);
-    final DateTime finalEndDate = DateTime(end.year, end.month, end.day, 23, 59, 59, 999);
+    final DateTime finalStartDate = DateTime(
+      start.year,
+      start.month,
+      start.day,
+      0,
+      0,
+      0,
+    );
+    final DateTime finalEndDate = DateTime(
+      end.year,
+      end.month,
+      end.day,
+      23,
+      59,
+      59,
+      999,
+    );
 
     final totalDays = finalEndDate.difference(finalStartDate).inDays + 1;
 
@@ -230,11 +245,13 @@ class ReportLogic {
       final double avgCal = tCal / totalDays;
 
       // 🔐 經由時分秒對齊後，產生具備完全確定性的快取身份證 (cacheId)
-      final String reportTypeName = reportType == ReportType.weekly 
-          ? 'weekly' 
+      final String reportTypeName = reportType == ReportType.weekly
+          ? 'weekly'
           : (reportType == ReportType.monthly ? 'monthly' : 'custom');
-      final String dateStringKey = "${finalStartDate.year}${finalStartDate.month}${finalStartDate.day}_${finalEndDate.year}${finalEndDate.month}${finalEndDate.day}";
-      final String cacheId = "${userId}_${reportTypeName}_${dateStringKey}_${foods.length}_${tCal.toStringAsFixed(0)}";      
+      final String dateStringKey =
+          "${finalStartDate.year}${finalStartDate.month}${finalStartDate.day}_${finalEndDate.year}${finalEndDate.month}${finalEndDate.day}";
+      final String cacheId =
+          "${userId}_${reportTypeName}_${dateStringKey}_${foods.length}_${tCal.toStringAsFixed(0)}";
       String aiText = "";
 
       try {
@@ -270,9 +287,9 @@ class ReportLogic {
               .collection('saved_reports')
               .doc(cacheId)
               .set({
-            'content': aiText,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+                'content': aiText,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
           print("💾 報告 A 已安全在 Firebase 快取鎖定！");
         } catch (e) {
           print("寫入 Firebase 備份失敗: $e");
@@ -366,7 +383,8 @@ class ReportLogic {
       );
     }
 
-    final prompt = """
+    final prompt =
+        """
     你是一位親切、專業的台灣臨床營養師。請根據以下使用者在這段期間的飲食數據，生成繁體中文的專業飲食分析與改善建議。
 
     【飲食數據統計】
@@ -408,7 +426,7 @@ class ReportLogic {
     try {
       final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
       final model = GenerativeModel(
-        model: 'gemini-2.5-flash', 
+        model: 'gemini-2.5-flash',
         apiKey: apiKey,
         generationConfig: GenerationConfig(
           temperature: 0.0, // 鎖死最嚴謹輸出
@@ -517,6 +535,7 @@ class _ReportPageState extends State<ReportPage>
       }
     }
   }
+
   // ── PDF 匯出 ─────────────────────────────────────────────────────────────────
   Future<void> _exportToPDF() async {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -731,12 +750,8 @@ class _ReportPageState extends State<ReportPage>
       );
 
       final bytes = await pdf.save();
-      final blob = html.Blob([bytes], 'application/pdf');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..setAttribute('download', '營養報告.pdf')
-        ..click();
-      html.Url.revokeObjectUrl(url);
+
+      await Printing.sharePdf(bytes: bytes, filename: '營養報告.pdf');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1246,6 +1261,7 @@ class _ReportPageState extends State<ReportPage>
       child: Icon(_mealIcon(mealType), color: color, size: 20),
     );
   }
+
   static IconData _mealIcon(String t) {
     switch (t) {
       case '早餐':

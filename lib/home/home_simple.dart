@@ -19,16 +19,16 @@ import '../report_page.dart';
 // ── 簡單模式餐別時間區間 ───────────────────────────────────────────────────────
 String _simpleMealTypeByTime(DateTime time) {
   final h = time.hour;
-  if (h >= 3  && h < 11) return '早餐';
+  if (h >= 3 && h < 11) return '早餐';
   if (h >= 11 && h < 17) return '午餐';
   return '晚餐';
 }
 
 // ── 每餐統計資料 ───────────────────────────────────────────────────────────────
 class _MealStats {
-  final String         label;
-  final IconData       icon;
-  final Color          color;
+  final String label;
+  final IconData icon;
+  final Color color;
   final List<FoodItem> items;
 
   const _MealStats({
@@ -38,8 +38,8 @@ class _MealStats {
     required this.items,
   });
 
-  bool      get hasData => items.isNotEmpty;
-  FoodItem? get first   => hasData ? items.first : null;
+  bool get hasData => items.isNotEmpty;
+  FoodItem? get first => hasData ? items.first : null;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -53,19 +53,19 @@ class HomeSimple extends StatefulWidget {
 
 class _HomeSimpleState extends State<HomeSimple> {
   // 🟢 與第一份對齊：_targetUid 控制「現在看誰的資料」
-  String?             _targetUid;
-  String              _targetName = "我自己";
-  DateTime            _selectedDate = DateTime.now();
+  String? _targetUid;
+  String _targetName = "我自己";
+  DateTime _selectedDate = DateTime.now();
   StreamSubscription? _foodSubscription;
-  List<FoodItem>      _foodList  = [];
-  bool                _isLoading = true;
+  List<FoodItem> _foodList = [];
+  bool _isLoading = true;
 
   // ── 生命週期 ─────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _targetUid  = FirebaseAuth.instance.currentUser?.uid; // 預設看自己
+    _targetUid = FirebaseAuth.instance.currentUser?.uid; // 預設看自己
     _targetName = "我自己";
     _selectedDate = DateTime.now();
     NotificationHandler.init();
@@ -76,7 +76,7 @@ class _HomeSimpleState extends State<HomeSimple> {
       } else {
         // 🟢 登入時若還沒有目標 UID，預設看自己
         if (_targetUid == null) {
-          _targetUid  = user.uid;
+          _targetUid = user.uid;
           _targetName = "我自己";
         }
         _listenToFirebaseData();
@@ -97,8 +97,8 @@ class _HomeSimpleState extends State<HomeSimple> {
     if (!mounted) return;
     setState(() {
       _foodList.clear();
-      _isLoading  = false;
-      _targetUid  = null;
+      _isLoading = false;
+      _targetUid = null;
       _targetName = "我自己";
     });
   }
@@ -109,36 +109,51 @@ class _HomeSimpleState extends State<HomeSimple> {
 
     final uidToFetch = _targetUid;
     if (uidToFetch == null) {
-      setState(() { _foodList = []; _isLoading = false; });
+      setState(() {
+        _foodList = [];
+        _isLoading = false;
+      });
       return;
     }
 
     debugPrint("正在監聽資料，目標 UID: $uidToFetch ($_targetName)");
 
     final start = DateTime(
-        _selectedDate.year, _selectedDate.month, _selectedDate.day);
-    final end   = DateTime(
-        _selectedDate.year, _selectedDate.month, _selectedDate.day,
-        23, 59, 59, 999);
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
+    final end = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      23,
+      59,
+      59,
+      999,
+    );
 
     _foodSubscription = FirebaseFirestore.instance
         .collection('users')
-        .doc(uidToFetch)          // 🟢 使用目標 UID
+        .doc(uidToFetch) // 🟢 使用目標 UID
         .collection('analysis_records')
         .where('created_at', isGreaterThanOrEqualTo: start)
         .where('created_at', isLessThanOrEqualTo: end)
         .orderBy('created_at', descending: true)
         .snapshots()
-        .listen(_onSnapshot, onError: (error) {
-          debugPrint('Firebase 錯誤: $error');
-          // 🟢 權限不足時提示（與第一份對齊）
-          if (error.toString().contains("permission") && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("您沒有權限查看此家人的資料")),
-            );
-          }
-          if (mounted) setState(() => _isLoading = false);
-        });
+        .listen(
+          _onSnapshot,
+          onError: (error) {
+            debugPrint('Firebase 錯誤: $error');
+            // 🟢 權限不足時提示（與第一份對齊）
+            if (error.toString().contains("permission") && mounted) {
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text("您沒有權限查看此家人的資料")));
+            }
+            if (mounted) setState(() => _isLoading = false);
+          },
+        );
   }
 
   Future<void> _onSnapshot(QuerySnapshot snapshot) async {
@@ -147,11 +162,15 @@ class _HomeSimpleState extends State<HomeSimple> {
       final item = await _parseFoodItem(doc);
       if (item != null) result.add(item);
     }
-    if (mounted) setState(() { _foodList = result; _isLoading = false; });
+    if (mounted)
+      setState(() {
+        _foodList = result;
+        _isLoading = false;
+      });
   }
 
   Future<FoodItem?> _parseFoodItem(QueryDocumentSnapshot doc) async {
-    final data     = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>;
     final foodName = data['食物名'] ?? '未命名';
     if (foodName == 'string' || foodName == '未命名') return null;
 
@@ -168,28 +187,45 @@ class _HomeSimpleState extends State<HomeSimple> {
       final snap = await doc.reference.collection('ingredients').get();
       for (final ing in snap.docs) {
         final d = ing.data();
-        final grams    = parseToDouble(d['重量(g)']);
+        final grams = parseToDouble(d['重量(g)']);
         final calories = parseToDouble(d['熱量(kcal)']);
-        final protein  = parseToDouble(d['蛋白質(g)']);
-        final carbs    = parseToDouble(d['碳水化合物(g)']);
-        final fat      = parseToDouble(d['脂肪(g)']);
-        g += grams; cal += calories; p += protein; c += carbs; f += fat;
-        ingredients.add(Ingredient(
-          id: ing.id, name: d['食材名'] ?? '未知食材',
-          grams: grams, calories: calories,
-          carbs: carbs, protein: protein, fat: fat,
-        ));
+        final protein = parseToDouble(d['蛋白質(g)']);
+        final carbs = parseToDouble(d['碳水化合物(g)']);
+        final fat = parseToDouble(d['脂肪(g)']);
+        g += grams;
+        cal += calories;
+        p += protein;
+        c += carbs;
+        f += fat;
+        ingredients.add(
+          Ingredient(
+            id: ing.id,
+            name: d['食材名'] ?? '未知食材',
+            grams: grams,
+            calories: calories,
+            carbs: carbs,
+            protein: protein,
+            fat: fat,
+          ),
+        );
       }
-    } catch (e) { debugPrint('讀取食材錯誤: $e'); }
+    } catch (e) {
+      debugPrint('讀取食材錯誤: $e');
+    }
 
     return FoodItem(
-      reference: doc.reference, id: doc.id, name: foodName,
-      calories:  '${cal.toStringAsFixed(0)} 大卡',
+      reference: doc.reference,
+      id: doc.id,
+      name: foodName,
+      calories: '${cal.toStringAsFixed(0)} 大卡',
       imagePath: data['圖片_base64'] ?? data['圖片網址'] ?? '',
-      grams: g.toStringAsFixed(1), protein: p.toStringAsFixed(1),
-      carbs: c.toStringAsFixed(1), fat: f.toStringAsFixed(1),
+      grams: g.toStringAsFixed(1),
+      protein: p.toStringAsFixed(1),
+      carbs: c.toStringAsFixed(1),
+      fat: f.toStringAsFixed(1),
       ingredients: ingredients,
-      remark: data['備註'] ?? '', aiSuggestion: data['AI分析建議'] ?? '',
+      remark: data['備註'] ?? '',
+      aiSuggestion: data['AI分析建議'] ?? '',
       mealType: mealType,
     );
   }
@@ -197,17 +233,30 @@ class _HomeSimpleState extends State<HomeSimple> {
   // ── 分組（每時段只保留最新一筆）────────────────────────────────────────────────
 
   List<_MealStats> _groupByMeal() {
-    final map = <String, List<FoodItem>>{
-      '早餐': [], '午餐': [], '晚餐': [],
-    };
+    final map = <String, List<FoodItem>>{'早餐': [], '午餐': [], '晚餐': []};
     for (final item in _foodList) {
       final key = map.containsKey(item.mealType) ? item.mealType : '晚餐';
       if (map[key]!.isEmpty) map[key]!.add(item);
     }
     return [
-      _MealStats(label: '早餐', icon: Icons.wb_twilight,  color: Colors.amber,        items: map['早餐']!),
-      _MealStats(label: '午餐', icon: Icons.wb_sunny,     color: Colors.orangeAccent, items: map['午餐']!),
-      _MealStats(label: '晚餐', icon: Icons.nights_stay,  color: Colors.indigoAccent, items: map['晚餐']!),
+      _MealStats(
+        label: '早餐',
+        icon: Icons.wb_twilight,
+        color: Colors.amber,
+        items: map['早餐']!,
+      ),
+      _MealStats(
+        label: '午餐',
+        icon: Icons.wb_sunny,
+        color: Colors.orangeAccent,
+        items: map['午餐']!,
+      ),
+      _MealStats(
+        label: '晚餐',
+        icon: Icons.nights_stay,
+        color: Colors.indigoAccent,
+        items: map['晚餐']!,
+      ),
     ];
   }
 
@@ -235,7 +284,10 @@ class _HomeSimpleState extends State<HomeSimple> {
         Text(
           '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}',
           style: const TextStyle(
-              fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
         ),
         IconButton(
           icon: Icon(Icons.calendar_month_outlined, color: Colors.grey[700]),
@@ -254,7 +306,10 @@ class _HomeSimpleState extends State<HomeSimple> {
       lastDate: now,
     );
     if (picked != null && picked != _selectedDate && mounted) {
-      setState(() { _selectedDate = picked; _isLoading = true; });
+      setState(() {
+        _selectedDate = picked;
+        _isLoading = true;
+      });
       _listenToFirebaseData();
     }
   }
@@ -326,9 +381,9 @@ class _HomeSimpleState extends State<HomeSimple> {
             currentName: _targetName,
             onSelected: (uid, name) {
               setState(() {
-                _targetUid  = uid;
+                _targetUid = uid;
                 _targetName = name;
-                _isLoading  = true; // 切換時顯示 loading
+                _isLoading = true; // 切換時顯示 loading
               });
               _listenToFirebaseData(); // 🟢 用新的 _targetUid 重新監聽
             },
@@ -367,27 +422,29 @@ class _HomeSimpleState extends State<HomeSimple> {
           _buildDateRow(),
           const SizedBox(height: 10),
           // 三張餐別卡片
-          ...meals.map((m) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _MealCard(
-              stats:          m,
-              selectedDate:   _selectedDate,
-              isReadOnly:     isViewingOthers, // 🟢 傳入唯讀旗標
-              onDelete:       (item) => ConfirmDeleteDialog.show(context, item),
-              onTapEmpty:     () => _goAnalysisWithMeal(m.label),
+          ...meals.map(
+            (m) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _MealCard(
+                stats: m,
+                selectedDate: _selectedDate,
+                isReadOnly: isViewingOthers, // 🟢 傳入唯讀旗標
+                onDelete: (item) => ConfirmDeleteDialog.show(context, item),
+                onTapEmpty: () => _goAnalysisWithMeal(m.label),
+              ),
             ),
-          )),
+          ),
 
           const SizedBox(height: 4),
 
           // 今日完整紀錄列表
           DailyFoodList(
-            isLoading:    _isLoading,
-            foodList:     _foodList,
-            isReadOnly:   isViewingOthers, // 🟢 傳入唯讀旗標
-            onTapItem:    (item) => FoodEditDialog.show(
+            isLoading: _isLoading,
+            foodList: _foodList,
+            isReadOnly: isViewingOthers, // 🟢 傳入唯讀旗標
+            onTapItem: (item) => FoodEditDialog.show(
               context,
-              item:         item,
+              item: item,
               selectedDate: _selectedDate,
             ),
             onDeleteItem: (item) => ConfirmDeleteDialog.show(context, item),
@@ -425,20 +482,18 @@ class _MealCard extends StatelessWidget {
   const _MealCard({
     required this.stats,
     required this.selectedDate,
-    required this.isReadOnly,   // 🟢 新增
+    required this.isReadOnly, // 🟢 新增
     required this.onDelete,
     required this.onTapEmpty,
   });
 
-  final _MealStats              stats;
-  final DateTime                selectedDate;
-  final bool                    isReadOnly;   // 🟢 新增
+  final _MealStats stats;
+  final DateTime selectedDate;
+  final bool isReadOnly; // 🟢 新增
   final void Function(FoodItem) onDelete;
-  final VoidCallback             onTapEmpty;
+  final VoidCallback onTapEmpty;
 
-  Color get _bg     => stats.hasData
-      ? stats.color.withOpacity(0.07)
-      : Colors.white;
+  Color get _bg => stats.hasData ? stats.color.withOpacity(0.07) : Colors.white;
   Color get _border => stats.hasData
       ? stats.color.withOpacity(0.30)
       : Colors.grey.withOpacity(0.20);
@@ -451,14 +506,14 @@ class _MealCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
         decoration: BoxDecoration(
-          color:        _bg,
+          color: _bg,
           borderRadius: BorderRadius.circular(14),
-          border:       Border.all(color: _border),
+          border: Border.all(color: _border),
           boxShadow: [
             BoxShadow(
-              color:      Colors.grey.withOpacity(0.10),
+              color: Colors.grey.withOpacity(0.10),
               blurRadius: 8,
-              offset:     const Offset(0, 3),
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -469,8 +524,7 @@ class _MealCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: stats.color.withOpacity(
-                    stats.hasData ? 0.18 : 0.10),
+                color: stats.color.withOpacity(stats.hasData ? 0.18 : 0.10),
                 shape: BoxShape.circle,
               ),
               child: Icon(stats.icon, size: 22, color: stats.color),
@@ -481,19 +535,25 @@ class _MealCard extends StatelessWidget {
             Expanded(
               child: stats.hasData
                   ? _FilledContent(
-                      stats:       stats,
+                      stats: stats,
                       selectedDate: selectedDate,
-                      isReadOnly:  isReadOnly, // 🟢 傳入
+                      isReadOnly: isReadOnly, // 🟢 傳入
                     )
-                  : _EmptyContent(stats: stats, isReadOnly: isReadOnly), // 🟢 傳入
+                  : _EmptyContent(
+                      stats: stats,
+                      isReadOnly: isReadOnly,
+                    ), // 🟢 傳入
             ),
 
             // 🟢 右側：唯讀模式不顯示任何按鈕
             if (!isReadOnly)
               stats.hasData
                   ? _DeleteButton(item: stats.first!, onDelete: onDelete)
-                  : Icon(Icons.add_circle_outline,
-                      color: Colors.grey[350], size: 22),
+                  : Icon(
+                      Icons.add_circle_outline,
+                      color: Colors.grey[350],
+                      size: 22,
+                    ),
           ],
         ),
       ),
@@ -506,15 +566,17 @@ class _MealCard extends StatelessWidget {
 class _EmptyContent extends StatelessWidget {
   const _EmptyContent({required this.stats, required this.isReadOnly}); // 🟢
   final _MealStats stats;
-  final bool       isReadOnly; // 🟢
+  final bool isReadOnly; // 🟢
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(stats.label,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        Text(
+          stats.label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 2),
         // 🟢 唯讀時顯示「尚無紀錄」，否則顯示「點擊新增」
         Text(
@@ -535,36 +597,40 @@ class _FilledContent extends StatelessWidget {
     required this.isReadOnly, // 🟢
   });
   final _MealStats stats;
-  final DateTime   selectedDate;
-  final bool       isReadOnly; // 🟢
+  final DateTime selectedDate;
+  final bool isReadOnly; // 🟢
 
   @override
   Widget build(BuildContext context) {
     final item = stats.first!;
     return GestureDetector(
       // 🟢 唯讀時仍可查看詳情（但 FoodEditDialog 本身不提供編輯功能即可）
-      onTap: () => FoodEditDialog.show(
-        context,
-        item:         item,
-        selectedDate: selectedDate,
-      ),
+      onTap: () =>
+          FoodEditDialog.show(context, item: item, selectedDate: selectedDate),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(stats.label,
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: stats.color)),
+              Text(
+                stats.label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: stats.color,
+                ),
+              ),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(item.name,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1),
+                child: Text(
+                  item.name,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
               ),
             ],
           ),
@@ -573,17 +639,29 @@ class _FilledContent extends StatelessWidget {
             spacing: 8,
             runSpacing: 2,
             children: [
-              Text(item.calories,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: stats.color)),
-              _MacroLabel('蛋白質', item.protein,
-                  const Color.fromARGB(255, 117, 181, 233)),
-              _MacroLabel('碳水', item.carbs,
-                  const Color.fromARGB(255, 132, 202, 206)),
-              _MacroLabel('脂肪', item.fat,
-                  const Color.fromARGB(255, 245, 190, 118)),
+              Text(
+                item.calories,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: stats.color,
+                ),
+              ),
+              _MacroLabel(
+                '蛋白質',
+                item.protein,
+                const Color.fromARGB(255, 117, 181, 233),
+              ),
+              _MacroLabel(
+                '碳水',
+                item.carbs,
+                const Color.fromARGB(255, 132, 202, 206),
+              ),
+              _MacroLabel(
+                '脂肪',
+                item.fat,
+                const Color.fromARGB(255, 245, 190, 118),
+              ),
             ],
           ),
         ],
@@ -596,7 +674,7 @@ class _FilledContent extends StatelessWidget {
 
 class _DeleteButton extends StatelessWidget {
   const _DeleteButton({required this.item, required this.onDelete});
-  final FoodItem                item;
+  final FoodItem item;
   final void Function(FoodItem) onDelete;
 
   @override
@@ -605,8 +683,11 @@ class _DeleteButton extends StatelessWidget {
       width: 36,
       child: IconButton(
         padding: EdgeInsets.zero,
-        icon: const Icon(Icons.delete_outline, size: 20,
-            color: Color.fromARGB(180, 26, 24, 23)),
+        icon: const Icon(
+          Icons.delete_outline,
+          size: 20,
+          color: Color.fromARGB(180, 26, 24, 23),
+        ),
         onPressed: () => onDelete(item),
       ),
     );
@@ -619,14 +700,13 @@ class _MacroLabel extends StatelessWidget {
   const _MacroLabel(this.prefix, this.value, this.color);
   final String prefix;
   final String value;
-  final Color  color;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Text('$prefix ${value}g',
-        style: TextStyle(
-            fontSize: 13,
-            color: color,
-            fontWeight: FontWeight.w600));
+    return Text(
+      '$prefix ${value}g',
+      style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.w600),
+    );
   }
 }
