@@ -212,6 +212,9 @@ class ReportLogic {
           debugPrint('撈取食材錯誤: $e');
         }
 
+        // 若 total_weight 欄位遺失或為 0，用三大營養素克數加總估算底線
+        if (mW == 0) mW = mP + mC + mF;
+
         dailyCals[dateKey] = (dailyCals[dateKey] ?? 0) + mCal;
         tCal += mCal;
         tP += mP;
@@ -578,19 +581,27 @@ class _ReportPageState extends State<ReportPage>
             style: pw.TextStyle(font: chineseFontBold, fontSize: 10),
           ),
           pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.center,
+            mainAxisAlignment: pw.MainAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Container(
                 width: 35,
                 height: 35,
                 margin: const pw.EdgeInsets.only(right: 8),
+                alignment: pw.Alignment.centerLeft,
                 child: imageProvider != null
                     ? pw.Image(imageProvider, fit: pw.BoxFit.cover)
                     : pw.Container(color: PdfColors.grey300),
               ),
-              pw.Text(
-                meal.name,
-                style: pw.TextStyle(font: chineseFontBold, fontSize: 11),
+              pw.Expanded(
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.only(top: 2),
+                  child: pw.Text(
+                    meal.name,
+                    style: pw.TextStyle(font: chineseFontBold, fontSize: 11),
+                    softWrap: true,
+                  ),
+                ),
               ),
             ],
           ),
