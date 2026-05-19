@@ -38,6 +38,7 @@ dependencies:
   connectivity_plus: ^7.1.1
   universal_html: ^2.3.0
 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

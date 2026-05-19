@@ -1,5 +1,5 @@
-import 'routes.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -8,6 +8,7 @@ import 'app_theme.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'notifications/notification_handler.dart';
 import 'widget_handler.dart';
+import 'routes.dart';
 import 'package:provider/provider.dart';
 import 'home/app_mode.dart';
 
@@ -40,7 +41,6 @@ Future<void> _initializeAuth() async {
 // 背景訊息處理
 Future<void> _backgroundMessageHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
-
   debugPrint("背景收到訊息: ${message.data}");
 }
 

@@ -14,12 +14,11 @@ import 'dart:convert';
 // import 'dart:html' as html;
 
 // 🟢 跨平台支援 (完美融合 HEAD 的存檔邏輯)
-import 'package:universal_html/html.dart' as html;
+import 'dart:html' as html;
 import 'package:flutter/foundation.dart'; // 引入 kIsWeb 判斷
 import 'dart:io'; // 給手機端存檔用
 import 'package:path_provider/path_provider.dart'; // 取得手機路徑
 import 'package:share_plus/share_plus.dart'; // 呼叫手機的原生分享/存檔
-
 import '../models.dart';
 import '../home/nutrition_helpers.dart';
 
@@ -32,7 +31,6 @@ enum ReportType { weekly, monthly, custom }
 // ════════════════════════════════════════════════════════════════════════════
 // 資料層：ReportLogic
 // ════════════════════════════════════════════════════════════════════════════
-
 class ReportData {
   final String period;
   final double totalCalories;
@@ -62,7 +60,6 @@ class ReportData {
 class ReportLogic {
   ReportLogic({required this.userId, DateTime? initialDate})
     : _referenceDate = initialDate ?? DateTime.now();
-
   final String userId;
   DateTime? _referenceDate;
   ReportType reportType = ReportType.weekly;
@@ -114,18 +111,34 @@ class ReportLogic {
         break;
     }
 
-    start = DateTime(start.year, start.month, start.day, 0, 0, 0);
-    end = DateTime(end.year, end.month, end.day, 23, 59, 59, 999);
+    // 🔒 妳寫的黃金防線：定死時分秒，消除任何重新整理網頁時產生的微秒差！
+    final DateTime finalStartDate = DateTime(
+      start.year,
+      start.month,
+      start.day,
+      0,
+      0,
+      0,
+    );
+    final DateTime finalEndDate = DateTime(
+      end.year,
+      end.month,
+      end.day,
+      23,
+      59,
+      59,
+      999,
+    );
 
-    final totalDays = end.difference(start).inDays + 1;
+    final totalDays = finalEndDate.difference(finalStartDate).inDays + 1;
 
     try {
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('analysis_records')
-          .where('created_at', isGreaterThanOrEqualTo: start)
-          .where('created_at', isLessThanOrEqualTo: end)
+          .where('created_at', isGreaterThanOrEqualTo: finalStartDate)
+          .where('created_at', isLessThanOrEqualTo: finalEndDate)
           .orderBy('created_at', descending: false)
           .get();
 
@@ -226,6 +239,60 @@ class ReportLogic {
       }
 
       final recorded = dailyCals.length;
+      final double avgCal = tCal / totalDays;
+
+      // 🔐 經由時分秒對齊後，產生具備完全確定性的快取身份證 (cacheId)
+      final String reportTypeName = reportType == ReportType.weekly
+          ? 'weekly'
+          : (reportType == ReportType.monthly ? 'monthly' : 'custom');
+      final String dateStringKey =
+          "${finalStartDate.year}${finalStartDate.month}${finalStartDate.day}_${finalEndDate.year}${finalEndDate.month}${finalEndDate.day}";
+      final String cacheId =
+          "${userId}_${reportTypeName}_${dateStringKey}_${foods.length}_${tCal.toStringAsFixed(0)}";
+      String aiText = "";
+
+      try {
+        // 先去 Firebase 檢查這份舊報告存在與否
+        DocumentSnapshot cachedDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('saved_reports')
+            .doc(cacheId)
+            .get();
+
+        if (cachedDoc.exists && cachedDoc.data() != null) {
+          aiText = (cachedDoc.data() as Map<String, dynamic>)['content'] ?? "";
+          print("🎯 快取完美命中！直接讀取舊報告 A，重整不再消耗 API 額度。");
+        }
+      } catch (e) {
+        print("讀取舊報告快取失敗: $e");
+      }
+
+      // 如果 Firebase 裡面沒存過，或者是全新數據
+      if (aiText.isEmpty) {
+        print("🤖 [數據更新/首次生成] 正在呼叫 Gemini API 生成全新飲食建議...");
+        aiText = await _generateFeedback(
+          avgCal: avgCal,
+          totalDaysInRange: totalDays.toDouble(),
+          foods: foods,
+        );
+
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('saved_reports')
+              .doc(cacheId)
+              .set({
+                'content': aiText,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+          print("💾 報告 A 已安全在 Firebase 快取鎖定！");
+        } catch (e) {
+          print("寫入 Firebase 備份失敗: $e");
+        }
+      }
+
       reportData = ReportData(
         period: dateRangeText,
         totalCalories: tCal,
@@ -241,11 +308,7 @@ class ReportLogic {
         },
         topCalorieDays: dailyCals.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value)),
-        aiFeedback: await _generateFeedback(
-          avgCal: tCal / totalDays,
-          totalDaysInRange: totalDays.toDouble(),
-          foods: foods,
-        ),
+        aiFeedback: aiText, // 使用經過快取檢查的 aiText 成果
       );
       foodList = foods;
     } catch (e) {
@@ -318,35 +381,54 @@ class ReportLogic {
     }
 
     final prompt =
-        '''
-你是一位親切、專業的台灣臨床營養師。請根據以下使用者在這段期間的飲食數據，生成繁體中文的專業飲食分析與改善建議。
+        """
+    你是一位親切、專業的台灣臨床營養師。請根據以下使用者在這段期間的飲食數據，生成繁體中文的專業飲食分析與改善建議。
 
-【飲食數據統計】
-- 統計天數：${totalDaysInRange.toInt()} 天
-- 總餐數：${foods.length} 餐
-- 每日平均攝取熱量：${avgCal.toStringAsFixed(0)} kcal
+    【飲食數據統計】
+    - 統計天數：${totalDaysInRange.toInt()} 天
+    - 總餐數：${foods.length} 餐
+    - 每日平均攝取熱量：${avgCal.toStringAsFixed(0)} kcal
 
-【詳細飲食明細】
-${mealsText.toString()}
+    【詳細飲食明細】
+    ${mealsText.toString()}
 
-核心指令：
-請直接根據上述數據，給出 3 到 5 點「精準、具體、可操作」的建議。
-請嚴格遵守以下格式規範，不要包含任何前言（例如：很高興為您分析）、不要標題、不要結尾客套話：
+    【專業評估依據（台灣衛福部國健署標準）】
+    請嚴格參照台灣「每日飲食指南」與「我的餐盤」核心原則來審視上述明細：
+    1. 三大營養素均衡比例：標準為蛋白質 10-20%、脂質 20-30%、醣類（碳水化合物） 50-60%。
+    2. 六大類食物均衡度：檢視是否滿足「每天早晚一杯奶、每餐水果拳頭大、菜比水果多一點、飯跟蔬菜一樣多、豆魚蛋肉一掌心、堅果種子一茶匙」的口訣。特別留意台灣人極易缺乏乳品類與堅果種子類。
 
-1. 熱量評估：[請用1句話評估平均熱量是否合適，並說出為什麼]
-2. 營養比例：[請用1句話指出三大營養素的優缺點]
-3. 飲食多樣性：[請用1句話指出缺乏哪類食材或哪類吃太多]
-4. 行動指南：[請給出一個明天就能開始做的具體飲食調整動作]
+    核心指令：
+    請直接根據上述數據與台灣官方標準，給出 4 點「精準、具體、可操作」的建議。
+    請嚴格遵守以下格式規範，不要包含任何前後言、不要開頭自我介紹、不要結尾客套話。
+    每點的標題與內容請務必「分行」分開，嚴格依照下方格式輸出：
 
-備註：
-- 每點之間請換行。
-- 語氣要溫柔、口語化且專業（多用「您」、「建議您可以嘗試...」）。
-- 整體總字數控制在 200 字以內，絕對不要冗長。
-''';
+    1. 熱量評估：
+    [請用1到2句話評估平均熱量是否合適，並說出為什麼]
+
+    2. 營養比例：
+    [請用1到2句話指出三大營養素比例與台灣官方健康標準對比的優缺點]
+
+    3. 飲食多樣性：
+    [請依據我的餐盤原則，用1到2句話指出缺乏哪大類食材(如乳品、堅果或蔬果)或哪類吃太多]
+
+    4. 行動指南：
+    [請結合「我的餐盤」口訣，給出一個明天就能開始做的具體飲食調整動作]
+
+    備註：
+    - 每個項目（包含標題與內容）之間請空一行，確保排版清晰。
+    - 語氣要溫柔、口語化且專業（多用「您」、「建議您可以嘗試...」）。
+    - 整體總字數控制在 250 字以內，絕對不要冗長。
+    """;
 
     try {
       final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-      final model = GenerativeModel(model: 'gemini-2.5-flash', apiKey: apiKey);
+      final model = GenerativeModel(
+        model: 'gemini-2.5-flash',
+        apiKey: apiKey,
+        generationConfig: GenerationConfig(
+          temperature: 0.0, // 鎖死最嚴謹輸出
+        ),
+      );
       final res = await model.generateContent([Content.text(prompt)]);
       return res.text ?? '無法取得 AI 建議';
     } catch (e) {
@@ -368,7 +450,6 @@ ${mealsText.toString()}
 // ════════════════════════════════════════════════════════════════════════════
 // UI 層：ReportPage
 // ════════════════════════════════════════════════════════════════════════════
-
 class ReportPage extends StatefulWidget {
   const ReportPage({
     super.key,
@@ -453,7 +534,6 @@ class _ReportPageState extends State<ReportPage>
   }
 
   // ── PDF 匯出 ─────────────────────────────────────────────────────────────────
-
   Future<void> _exportToPDF() async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(

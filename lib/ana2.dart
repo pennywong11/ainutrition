@@ -170,12 +170,8 @@ class _DashboardPage3State extends State<DashboardPage3> {
         });
       } catch (e) {
         print("解碼舊照片失敗: $e");
+        WidgetsBinding.instance.addPostFrameCallback((_) {});
       }
-    } else {
-      // 🎯 如果是原本一般主頁大加號按進來的（沒有舊照片），才彈出原本的選擇選單
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showModeSelection();
-      });
     }
   }
 

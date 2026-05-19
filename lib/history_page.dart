@@ -1481,7 +1481,6 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     // 判斷：如果熱量是 0 大卡，就代表它是離線存下來、還沒分析過的資料
     bool isOfflineData =
         widget.item.calories == "0 大卡" || widget.item.calories == "0";
-
     if (path.startsWith('data:image') ||
         (path.length > 1000 && !path.startsWith('http'))) {
       try {
