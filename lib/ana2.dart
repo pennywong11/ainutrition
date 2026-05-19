@@ -170,11 +170,7 @@ class _DashboardPage3State extends State<DashboardPage3> {
         });
       } catch (e) {
         print("解碼舊照片失敗: $e");
-      }
-    } else {
-      // 🎯 如果是原本一般主頁大加號按進來的（沒有舊照片），才彈出原本的選擇選單
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showModeSelection();
       });
     }
   }
@@ -936,21 +932,21 @@ class _DashboardPage3State extends State<DashboardPage3> {
     }
   }
 
-  String _formatDateTime(DateTime dt) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
-  }
+        String _formatDateTime(DateTime dt) {
+          String twoDigits(int n) => n.toString().padLeft(2, '0');
+          return "${dt.year}-${twoDigits(dt.month)}-${twoDigits(dt.day)} ${twoDigits(dt.hour)}:${twoDigits(dt.minute)}";
+        }
 
-  void _showSnackBar(String message, {bool isSuccess = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
+        void _showSnackBar(String message, {bool isSuccess = false}) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
 
   // =========================================================================
   // UI 佈局核心邏輯

@@ -264,9 +264,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 double totalFat = 0;
 
                 try {
-                  var ingredientSnapshot = await doc.reference
-                      .collection('ingredients')
-                      .get();
+                  var ingredientSnapshot = await doc.reference.collection('ingredients').get();
 
                   for (var ingDoc in ingredientSnapshot.docs) {
                     var ingData = ingDoc.data();
@@ -327,8 +325,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
                 _isLoading = false;
               });
             }
-          },
-          onError: (error) {
+          }, onError: (error) {
             print("Firebase 查詢錯誤: $error");
             if (error.toString().contains("permission")) {
               ScaffoldMessenger.of(
@@ -337,8 +334,7 @@ class _NutritionHomePageState extends State<NutritionHomePage> {
             }
             // 發生錯誤時，也要結束載入狀態
             if (mounted) setState(() => _isLoading = false);
-          },
-        );
+          });
   }
 
   double _parseToDouble(dynamic value) {
@@ -1263,6 +1259,14 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     _carbController.text = widget.item.carbs;
     _fatController.text = widget.item.fat;
   }
+  // 檢查目前的網路狀態
+  Future<void> _checkInitialConnection() async {
+    final connectivityResult = await (Connectivity().checkConnectivity());
+    setState(() {
+      // 只要不是 none，就代表有連線 (Wi-Fi 或 行動數據)
+      _isOnline = connectivityResult != ConnectivityResult.none;
+    });
+ }
 
   // 檢查目前的網路狀態
   Future<void> _checkInitialConnection() async {
@@ -1481,7 +1485,6 @@ class _FoodEditDialogContentState extends State<FoodEditDialogContent> {
     // 判斷：如果熱量是 0 大卡，就代表它是離線存下來、還沒分析過的資料
     bool isOfflineData =
         widget.item.calories == "0 大卡" || widget.item.calories == "0";
-
     if (path.startsWith('data:image') ||
         (path.length > 1000 && !path.startsWith('http'))) {
       try {
