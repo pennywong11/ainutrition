@@ -14,10 +14,10 @@ import 'dart:convert';
 // import 'dart:html' as html;
 
 // 🟢 跨平台支援 (完美融合 HEAD 的存檔邏輯)
-import 'dart:html' as html;
-import 'package:flutter/foundation.dart'; // 引入 kIsWeb 判斷
-import 'dart:io'; // 給手機端存檔用
-import 'package:path_provider/path_provider.dart'; // 取得手機路徑
+// import 'dart:html' as html;
+// import 'package:flutter/foundation.dart'; // 引入 kIsWeb 判斷
+// import 'dart:io'; // 給手機端存檔用
+// import 'package:path_provider/path_provider.dart'; // 取得手機路徑
 import 'package:share_plus/share_plus.dart'; // 呼叫手機的原生分享/存檔
 import '../models.dart';
 import '../home/nutrition_helpers.dart';
@@ -750,12 +750,8 @@ class _ReportPageState extends State<ReportPage>
       );
 
       final bytes = await pdf.save();
-      final blob = html.Blob([bytes], 'application/pdf');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..setAttribute('download', '營養報告.pdf')
-        ..click();
-      html.Url.revokeObjectUrl(url);
+
+      await Printing.sharePdf(bytes: bytes, filename: '營養報告.pdf');
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
