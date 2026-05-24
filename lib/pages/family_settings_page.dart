@@ -18,20 +18,18 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
   final FamilyService _familyService = FamilyService();
   final TextEditingController _codeController = TextEditingController();
 
-  // 🟢 您選取的變數：控制 UI 狀態與倒數
   String? _generatedCode;
   bool _isLoading = false;
   Timer? _countdownTimer;
-  int _secondsRemaining = 600; // 10 分鐘倒數
+  int _secondsRemaining = 600;
 
   @override
   void dispose() {
     _codeController.dispose();
-    _countdownTimer?.cancel(); // 銷毀頁面時務必停止計時器
+    _countdownTimer?.cancel();
     super.dispose();
   }
 
-  // 🟢 自動銷毀邏輯 (UI 層級)
   void _startCountdown() {
     _countdownTimer?.cancel();
     setState(() {
@@ -46,9 +44,8 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
       } else {
         _countdownTimer?.cancel();
         setState(() {
-          _generatedCode = null; // 倒數結束，UI 上「銷毀」代碼
+          _generatedCode = null;
         });
-        // 提示使用者代碼已過期
         if (mounted) {
           ScaffoldMessenger.of(
             context,
@@ -64,6 +61,11 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  // 🟢 通用錯誤訊息過濾器 (拿掉醜醜的 Exception: 字眼)
+  String _cleanErrorMsg(Object e) {
+    return e.toString().replaceAll("Exception: ", "");
+  }
+
   Future<void> _handleGenerateCode() async {
     setState(() => _isLoading = true);
     try {
@@ -76,7 +78,30 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("產生失敗: $e")));
+      ).showSnackBar(SnackBar(content: Text("產生失敗: ${_cleanErrorMsg(e)}")));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleCancelCode() async {
+    if (_generatedCode == null) return;
+    setState(() => _isLoading = true);
+    try {
+      await _familyService.cancelInviteCode(_generatedCode!);
+      _countdownTimer?.cancel();
+      setState(() {
+        _generatedCode = null;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("已取消邀請碼")));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("取消失敗: ${_cleanErrorMsg(e)}")));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -111,9 +136,10 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
       }
     } catch (e) {
       if (!mounted) return;
+      // 🟢 修改：這裡只顯示過濾過乾淨的中文錯誤，不會有 [cloud_firestore] 等亂碼
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text("加入失敗: $e")));
+      ).showSnackBar(SnackBar(content: Text(_cleanErrorMsg(e))));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -135,47 +161,149 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
     );
   }
 
+  void _confirmDeleteRelation(Map<String, dynamic> member, bool isViewingMe) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("刪除共享關係"),
+        content: Text(
+          isViewingMe
+              ? "確定要撤銷 ${member['name']} 的觀看權限嗎？\n刪除後對方將無法再看到您的紀錄。"
+              : "確定要解除綁定 ${member['name']} 嗎？\n刪除後您將無法再看到對方的紀錄。",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("取消", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              setState(() => _isLoading = true);
+              try {
+                if (isViewingMe) {
+                  await _familyService.removeViewer(member);
+                } else {
+                  await _familyService.unbindFamily(member);
+                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text("已成功刪除共享關係")));
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("刪除失敗: ${_cleanErrorMsg(e)}")),
+                );
+              } finally {
+                if (mounted) setState(() => _isLoading = false);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("確定刪除", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("家庭共享設定")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              "📋 已連結的家人",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  "📋 家庭成員管理",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                StreamBuilder<DocumentSnapshot>(
+                  stream: _familyService.getMyFamilyList(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData)
+                      return const Center(child: CircularProgressIndicator());
+
+                    final userData =
+                        snapshot.data?.data() as Map<String, dynamic>?;
+                    final List<dynamic> watchingList =
+                        userData?['watching_list'] ?? [];
+                    final List<dynamic> viewersInfo =
+                        userData?['viewers_info'] ?? [];
+
+                    if (watchingList.isEmpty && viewersInfo.isEmpty)
+                      return _buildEmptyList();
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (viewersInfo.isNotEmpty) ...[
+                          const Text(
+                            "👀 正在查看我紀錄的家人",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: viewersInfo.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, index) => _buildMemberTile(
+                              viewersInfo[index],
+                              isViewingMe: true,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (watchingList.isNotEmpty) ...[
+                          const Text(
+                            "🔍 我正在查看的家人",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: watchingList.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
+                            itemBuilder: (context, index) => _buildMemberTile(
+                              watchingList[index],
+                              isViewingMe: false,
+                            ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 32),
+                const Divider(),
+                const SizedBox(height: 32),
+                _buildGenerateSection(),
+                const SizedBox(height: 40),
+                _buildJoinSection(),
+              ],
             ),
-            const SizedBox(height: 10),
-            StreamBuilder<DocumentSnapshot>(
-              stream: _familyService.getMyFamilyList(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData)
-                  return const Center(child: CircularProgressIndicator());
-                final userData = snapshot.data?.data() as Map<String, dynamic>?;
-                final List<dynamic> watchingList =
-                    userData?['watching_list'] ?? [];
-                if (watchingList.isEmpty) return _buildEmptyList();
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: watchingList.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) =>
-                      _buildMemberTile(watchingList[index]),
-                );
-              },
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: const Center(child: CircularProgressIndicator()),
             ),
-            const SizedBox(height: 32),
-            const Divider(),
-            const SizedBox(height: 32),
-            _buildGenerateSection(),
-            const SizedBox(height: 40),
-            _buildJoinSection(),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -195,14 +323,26 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
     );
   }
 
-  Widget _buildMemberTile(Map<String, dynamic> member) {
+  // 🟢 修改：將惱人的 subtitle 副標題移除了
+  Widget _buildMemberTile(
+    Map<String, dynamic> member, {
+    required bool isViewingMe,
+  }) {
     return ListTile(
       leading: const CircleAvatar(child: Icon(Icons.person)),
       title: Text(
         member['name'] ?? '未命名',
-        style: const TextStyle(fontWeight: FontWeight.bold),
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
       ),
-      subtitle: const Text("權限: 僅檢視"),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline, color: Colors.red),
+        onPressed: () => _confirmDeleteRelation(member, isViewingMe),
+      ),
+      tileColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
     );
   }
 
@@ -239,7 +379,7 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _handleGenerateCode,
+                  onPressed: _handleGenerateCode,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.orange,
                     foregroundColor: Colors.white,
@@ -251,9 +391,7 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: _isLoading
-                      ? _buildLoading()
-                      : const Text("產生邀請碼", style: TextStyle(fontSize: 16)),
+                  child: const Text("產生邀請碼", style: TextStyle(fontSize: 16)),
                 ),
               ] else ...[
                 const Text(
@@ -261,7 +399,6 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                   style: TextStyle(color: Colors.grey, letterSpacing: 1.2),
                 ),
                 const SizedBox(height: 12),
-
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 80),
                   child: FittedBox(
@@ -278,9 +415,7 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 12),
-
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Container(
@@ -307,7 +442,6 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -329,7 +463,7 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: _shareCode,
@@ -342,6 +476,15 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: _handleCancelCode,
+                  icon: const Icon(Icons.cancel, color: Colors.red),
+                  label: const Text(
+                    "取消產生",
+                    style: TextStyle(color: Colors.red),
+                  ),
                 ),
               ],
             ],
@@ -406,10 +549,4 @@ class _FamilySettingsPageState extends State<FamilySettingsPage> {
       ],
     );
   }
-
-  Widget _buildLoading() => const SizedBox(
-    width: 20,
-    height: 20,
-    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-  );
 }
